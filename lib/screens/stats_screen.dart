@@ -15,6 +15,142 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   DateTime _selectedMonth = DateTime.now();
+  bool _showWeeklySummary = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWeeklySummary();
+  }
+
+  Future<void> _checkWeeklySummary() async {
+    final provider = context.read<TaskProvider>();
+    final shouldShow = provider.shouldShowWeeklySummary();
+    final alreadyShown = await provider.hasWeeklySummaryBeenShown();
+    if (mounted) {
+      setState(() {
+        _showWeeklySummary = shouldShow && !alreadyShown;
+      });
+    }
+  }
+
+  void _dismissWeeklySummary() async {
+    final provider = context.read<TaskProvider>();
+    await provider.markWeeklySummaryShown();
+    if (mounted) {
+      setState(() {
+        _showWeeklySummary = false;
+      });
+    }
+  }
+
+  Widget _buildWeeklySummaryCard(TaskProvider provider) {
+    final lastWeekStart = provider.getWeekStart(DateTime.now()).subtract(const Duration(days: 7));
+    final lastWeek = provider.getWeeklyStats(weekStart: lastWeekStart);
+    final comparison = provider.getWeeklyComparison();
+    
+    String comparisonText;
+    Color comparisonColor;
+    if (comparison > 0) {
+      comparisonText = '+$comparison% vs last week';
+      comparisonColor = AppTheme.success;
+    } else if (comparison < 0) {
+      comparisonText = '$comparison% vs last week';
+      comparisonColor = AppTheme.accent;
+    } else {
+      comparisonText = 'same as last week';
+      comparisonColor = AppTheme.mutedText;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.accent.withValues(alpha: 0.2),
+            AppTheme.success.withValues(alpha: 0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.analytics_outlined, color: AppTheme.accent, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Last Week Summary',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: _dismissWeeklySummary,
+                child: const Icon(Icons.close, color: AppTheme.mutedText, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _summaryStatItem('Tasks', lastWeek.tasksCompleted.toString(), Icons.task_alt),
+              _summaryStatItem('Perfect Days', lastWeek.perfectDays.toString(), Icons.star),
+              _summaryStatItem('Completion', '${(lastWeek.completionRate * 100).toInt()}%', Icons.trending_up),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            comparisonText,
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              color: comparisonColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryStatItem(String label, String value, IconData icon) {
+    return Expanded(
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.mutedText, size: 16),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: AppTheme.mutedText,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,15 +172,32 @@ class _StatsScreenState extends State<StatsScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    'Stats',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Stats',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (provider.shouldShowWeeklySummary())
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: AppTheme.mutedText, size: 20),
+                          onPressed: () {
+                            setState(() {
+                              _showWeeklySummary = true;
+                            });
+                          },
+                          tooltip: 'Show weekly summary',
+                        ),
+                    ],
                   ),
                 ),
+                if (_showWeeklySummary) _buildWeeklySummaryCard(provider),
                 StatRow(
                   label1: 'Current streak',
                   value1: provider.streak.toString(),

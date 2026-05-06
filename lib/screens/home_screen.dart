@@ -596,29 +596,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('Repeat', style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.mutedText)),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.background,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppTheme.borderEmpty),
                   ),
                   child: DropdownButton<TaskRecurrence>(
                     value: selectedRecurrence,
                     dropdownColor: AppTheme.surface,
-                    style: GoogleFonts.dmSans(color: Colors.white),
+                    style: GoogleFonts.dmSans(color: Colors.white, fontSize: 14),
                     underline: const SizedBox(),
                     isExpanded: true,
                     items: const [
                       DropdownMenuItem(value: TaskRecurrence.none, child: Text('No repeat')),
                       DropdownMenuItem(value: TaskRecurrence.daily, child: Text('Every day')),
-                      DropdownMenuItem(value: TaskRecurrence.weekdays, child: Text('Weekdays (Mon-Fri)')),
-                      DropdownMenuItem(value: TaskRecurrence.weekends, child: Text('Weekends (Sat-Sun)')),
-                      DropdownMenuItem(value: TaskRecurrence.specificDays, child: Text('Specific days')),
+                      DropdownMenuItem(value: TaskRecurrence.weekdays, child: Text('Weekdays')),
+                      DropdownMenuItem(value: TaskRecurrence.weekends, child: Text('Weekends')),
+                      DropdownMenuItem(value: TaskRecurrence.specificDays, child: Text('Custom')),
                     ],
-                    onChanged: (value) {
+                    onChanged: (v) {
                       setDialogState(() {
-                        selectedRecurrence = value ?? TaskRecurrence.none;
-                        showSpecificDays = value == TaskRecurrence.specificDays;
+                        selectedRecurrence = v ?? TaskRecurrence.none;
+                        showSpecificDays = v == TaskRecurrence.specificDays;
                       });
                     },
                   ),
@@ -642,14 +642,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             }
                           });
                         },
-                        child: Container(
-                          width: 36,
-                          height: 36,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 38,
+                          height: 38,
                           decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.accent : AppTheme.background,
-                            borderRadius: BorderRadius.circular(8),
+                            color: isSelected ? AppTheme.accent : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: isSelected ? AppTheme.accent : AppTheme.borderEmpty,
+                              width: 1.5,
                             ),
                           ),
                           child: Center(

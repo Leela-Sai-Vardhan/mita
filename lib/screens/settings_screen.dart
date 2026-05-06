@@ -181,8 +181,9 @@ class SettingsScreen extends StatelessWidget {
                 Provider.of<TaskProvider>(context, listen: false).loadData();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('All data cleared', style: GoogleFonts.dmSans()),
-                    backgroundColor: AppTheme.surface,
+                    content: Text('All data cleared', style: GoogleFonts.dmSans(color: Colors.white)),
+                    backgroundColor: AppTheme.accent,
+                    behavior: SnackBarBehavior.floating,
                   ),
                 );
               }

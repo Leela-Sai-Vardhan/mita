@@ -1,7 +1,7 @@
 name: mita
 description: "Mita — Focus on what matters. Three tasks, one day."
 publish_to: 'none'
-version: 1.1.0+3
+version: 1.1.1+4
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -44,6 +44,9 @@ dependencies:
   url_launcher: ^6.2.5
   app_settings: ^7.0.0
   in_app_update: ^4.2.5
+
+  # Home Widget
+  home_widget: ^0.7.0
 
 dev_dependencies:
   flutter_test:

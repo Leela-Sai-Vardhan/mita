@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:home_widget/home_widget.dart';
 import '../data/database_helper.dart';
 import '../data/models/task_model.dart';
 import '../services/notification_service.dart';
@@ -65,6 +66,8 @@ class TaskProvider with ChangeNotifier {
       await _loadExtensionStatus();
 
       await _updateEndOfDayReminder();
+      await updateHomeWidget();
+      await _scheduleWeeklyNotification();
     } catch (e, stackTrace) {
       debugPrint('[TaskProvider] Error in loadData: $e\n$stackTrace');
     } finally {
@@ -85,6 +88,23 @@ class TaskProvider with ChangeNotifier {
     } else {
       _todayExtensionUsed = prefs.getInt('todayExtensionUsed') ?? 0;
     }
+  }
+
+  Future<void> _scheduleWeeklyNotification() async {
+    final thisWeek = getWeeklyStats();
+    final lastWeekStart = getWeekStart(DateTime.now()).subtract(const Duration(days: 7));
+    final lastWeek = getWeeklyStats(weekStart: lastWeekStart);
+    
+    int comparison = 0;
+    if (lastWeek.tasksCompleted > 0) {
+      comparison = ((thisWeek.tasksCompleted - lastWeek.tasksCompleted) / lastWeek.tasksCompleted * 100).round();
+    }
+    
+    await NotificationService().scheduleWeeklySummaryNotification(
+      tasksCompleted: thisWeek.tasksCompleted,
+      perfectDays: thisWeek.perfectDays,
+      comparison: comparison,
+    );
   }
 
   String _getTodayKey() {
@@ -147,6 +167,7 @@ class TaskProvider with ChangeNotifier {
     await _updateEndOfDayReminder();
 
     notifyListeners();
+    await updateHomeWidget();
     await JsonStorageService().saveToJson();
   }
 
@@ -190,11 +211,24 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> _handleRecurrence(Task task) async {
     final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    final taskDate = DateTime(task.date.year, task.date.month, task.date.day);
+    
+    final existingForTomorrow = _allTasks.any((t) => 
+      t.title == task.title && 
+      t.date.year == tomorrow.year && 
+      t.date.month == tomorrow.month && 
+      t.date.day == tomorrow.day &&
+      t.date.isAfter(taskDate)
+    );
+    
+    if (existingForTomorrow) return;
+    
     DateTime nextDate;
     
     switch (task.recurrence) {
       case TaskRecurrence.daily:
-        nextDate = now.add(const Duration(days: 1));
+        nextDate = tomorrow;
         break;
       case TaskRecurrence.weekdays:
         nextDate = _getNextWeekday(now);
@@ -209,6 +243,12 @@ class TaskProvider with ChangeNotifier {
         return;
     }
 
+    if (nextDate.isBefore(DateTime(now.year, now.month, now.day, 12, 0, 0))) {
+      nextDate = nextDate.add(const Duration(days: 7));
+      final adjusted = _adjustToValidDay(nextDate, task.recurrenceDays ?? []);
+      if (adjusted != nextDate) nextDate = adjusted;
+    }
+
     final nextTask = Task(
       title: task.title,
       date: nextDate,
@@ -221,6 +261,14 @@ class TaskProvider with ChangeNotifier {
     final id = await DatabaseHelper.instance.createTask(nextTask);
     final savedTask = nextTask.copyWith(id: id);
     _allTasks.add(savedTask);
+  }
+
+  DateTime _adjustToValidDay(DateTime date, List<int> validDays) {
+    if (validDays.isEmpty) return date;
+    while (!validDays.contains(date.weekday)) {
+      date = date.add(const Duration(days: 1));
+    }
+    return date;
   }
 
   DateTime _getNextWeekday(DateTime from) {
@@ -438,6 +486,129 @@ class TaskProvider with ChangeNotifier {
     }
 
     notifyListeners();
+    await updateHomeWidget();
     await JsonStorageService().saveToJson();
   }
+
+  Future<void> updateHomeWidget() async {
+    try {
+      final completed = _todayTasks.where((t) => t.isCompleted).length;
+      final total = _todayTasks.length > 0 ? _todayTasks.length : 3;
+      
+      await HomeWidget.saveWidgetData<String>('widget_streak', '🔥 $_streak');
+      await HomeWidget.saveWidgetData<String>('widget_progress', '$completed/$total tasks');
+      await HomeWidget.saveWidgetData<String>('widget_date', _formatDate());
+      
+      await HomeWidget.updateWidget(
+        androidName: 'HomeWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('HomeWidget update error: $e');
+    }
+  }
+  
+  String _formatDate() {
+    final now = DateTime.now();
+    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${weekdays[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
+  DateTime getWeekStart(DateTime date) {
+    final daysFromMonday = date.weekday - 1;
+    return DateTime(date.year, date.month, date.day - daysFromMonday);
+  }
+
+  DateTime _getWeekStart(DateTime date) {
+    final daysFromMonday = date.weekday - 1;
+    return DateTime(date.year, date.month, date.day - daysFromMonday);
+  }
+
+  WeeklyStats getWeeklyStats({DateTime? weekStart}) {
+    final targetWeekStart = weekStart ?? _getWeekStart(DateTime.now());
+    
+    int tasksCompleted = 0;
+    int totalTasks = 0;
+    int perfectDays = 0;
+    int daysWithActivity = 0;
+    
+    for (int i = 0; i < 7; i++) {
+      final day = targetWeekStart.add(Duration(days: i));
+      if (day.isAfter(DateTime.now())) break;
+      
+      final dayTasks = _allTasks.where((t) {
+        if (t.completedAt == null) return false;
+        final completed = t.completedAt!;
+        return completed.year == day.year && 
+               completed.month == day.month && 
+               completed.day == day.day;
+      }).toList();
+      
+      if (dayTasks.isNotEmpty) {
+        daysWithActivity++;
+        final completedCount = dayTasks.where((t) => t.isCompleted).length;
+        tasksCompleted += completedCount;
+        totalTasks += dayTasks.length;
+        if (completedCount >= 3 && dayTasks.length >= 3) {
+          perfectDays++;
+        }
+      }
+    }
+    
+    return WeeklyStats(
+      weekStart: targetWeekStart,
+      tasksCompleted: tasksCompleted,
+      totalTasks: totalTasks,
+      perfectDays: perfectDays,
+      daysWithActivity: daysWithActivity,
+    );
+  }
+
+  int getWeeklyComparison() {
+    final thisWeek = getWeeklyStats();
+    final lastWeekStart = _getWeekStart(DateTime.now()).subtract(const Duration(days: 7));
+    final lastWeek = getWeeklyStats(weekStart: lastWeekStart);
+    
+    if (lastWeek.tasksCompleted == 0) return 0;
+    
+    final diff = thisWeek.tasksCompleted - lastWeek.tasksCompleted;
+    return ((diff / lastWeek.tasksCompleted) * 100).round();
+  }
+
+  bool shouldShowWeeklySummary() {
+    final now = DateTime.now();
+    return now.weekday == 1;
+  }
+
+  Future<void> markWeeklySummaryShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now();
+    final key = 'weeklySummary_${today.year}_${_getWeekStart(today).millisecondsSinceEpoch}';
+    await prefs.setBool(key, true);
+  }
+
+  Future<bool> hasWeeklySummaryBeenShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now();
+    final key = 'weeklySummary_${today.year}_${_getWeekStart(today).millisecondsSinceEpoch}';
+    return prefs.getBool(key) ?? false;
+  }
+}
+
+class WeeklyStats {
+  final DateTime weekStart;
+  final int tasksCompleted;
+  final int totalTasks;
+  final int perfectDays;
+  final int daysWithActivity;
+
+  WeeklyStats({
+    required this.weekStart,
+    required this.tasksCompleted,
+    required this.totalTasks,
+    required this.perfectDays,
+    required this.daysWithActivity,
+  });
+
+  double get completionRate => totalTasks > 0 ? tasksCompleted / totalTasks : 0;
 }

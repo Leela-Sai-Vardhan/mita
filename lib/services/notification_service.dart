@@ -146,6 +146,62 @@ class NotificationService {
   int get notificationMinute => _notificationTimeMinute;
   bool get isPermissionGranted => _permissionGranted;
 
+  Future<void> scheduleWeeklySummaryNotification({
+    required int tasksCompleted,
+    required int perfectDays,
+    required int comparison,
+  }) async {
+    await _notifications.cancel(2);
+    
+    final now = tz.TZDateTime.now(tz.local);
+    var monday = tz.TZDateTime(tz.local, now.year, now.month, now.day);
+    
+    while (monday.weekday != 1) {
+      monday = monday.add(const Duration(days: 1));
+    }
+    
+    monday = tz.TZDateTime(
+      tz.local,
+      monday.year,
+      monday.month,
+      monday.day,
+      9,
+      0,
+    );
+    
+    if (monday.isBefore(now)) {
+      monday = monday.add(const Duration(days: 7));
+    }
+    
+    String comparisonText = comparison > 0 ? '+$comparison% vs last week' : 
+                         comparison < 0 ? '$comparison% vs last week' : 
+                         'same as last week';
+    
+    try {
+      await _notifications.zonedSchedule(
+        2,
+        'Weekly Summary',
+        'You completed $tasksCompleted tasks ($comparisonText) and had $perfectDays perfect days!',
+        monday,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'weekly_summary',
+            'Weekly Summaries',
+            channelDescription: 'Weekly progress summary notifications',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] ERROR scheduling weekly summary: $e');
+    }
+  }
+
   Future<void> scheduleTaskReminder(Task task) async {
     try {
       if (task.isCompleted || task.deadline == null) return;

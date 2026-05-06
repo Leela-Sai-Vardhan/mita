@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:in_app_update/in_app_update.dart';
+import 'package:home_widget/home_widget.dart';
 import 'core/theme.dart';
 import 'providers/task_provider.dart';
 import 'services/notification_service.dart';
@@ -13,6 +14,13 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Home Widget (optional - for widget support)
+  try {
+    HomeWidget.setAppGroupId('group.com.dreamstarx.mita');
+  } catch (e) {
+    debugPrint('HomeWidget app group error: $e');
+  }
   
   // Initialize Notification Service
   try {
@@ -79,6 +87,11 @@ class MainNavigationState extends State<MainNavigation> {
     _checkForUpdate();
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _checkForUpdate() async {
     try {
       final info = await InAppUpdate.checkForUpdate();
@@ -86,8 +99,9 @@ class MainNavigationState extends State<MainNavigation> {
         if (info.immediateUpdateAllowed) {
           await InAppUpdate.performImmediateUpdate();
         } else if (info.flexibleUpdateAllowed) {
-          await InAppUpdate.startFlexibleUpdate();
-          await InAppUpdate.completeFlexibleUpdate();
+          InAppUpdate.startFlexibleUpdate().then((_) {
+            InAppUpdate.completeFlexibleUpdate();
+          });
         }
       }
     } catch (e) {
