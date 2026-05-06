@@ -16,7 +16,7 @@
 ## Session History
 
 - **Last Session:** 2026-05-06
-- **Total Sessions:** 6
+- **Total Sessions:** 8
 - **Completed Tasks:**
   - Phase 1: Data Integration - Real stats from SharedPreferences, real heatmap data
   - Phase 2: AdMob Integration - Interstitial + Rewarded ads with test IDs
@@ -33,11 +33,60 @@
   - Phase 13: Test Notification - Button to verify notifications work
   - Phase 14: History Detail - Full screen with task completion times and productivity insights
   - Phase 15: JSON Storage Sync - Hybrid fix for task visibility issue on Samsung devices
+  - Phase 16: Swipe-to-delete - Long-press hint, dismissible with undo snackbar
+  - Phase 17: Task Recurrence - Daily/weekdays/weekends/custom recurrence options
+  - Phase 18: Weekly Summary - Monday stats summary with notification
+  - Phase 19: Production Stability - UI/UX improvements, crash fixes, and seamless updates
 
 ## Current Work
 
-- **Status:** Phase 17 Complete - Task Recurrence implemented
-- **Focus:** Recurring tasks with daily/weekdays/weekends/specific day options
+- **Status:** Phase 19 Complete - Production Stability achieved for v1.1.0+3
+- **Focus:** Fixing startup crash issues with error handling, enabling History task toggling, Add Task UI revamp, and Play Store AAB builds.
+
+## Changes Made
+
+### task_provider.dart
+- Added `getWeeklyStats({weekStart})` - Returns completed tasks, perfect days, completion rate for any week
+- Added `getWeeklyComparison()` - Calculates % change vs previous week (+/- value)
+- Added `shouldShowWeeklySummary()` - Checks if today is Monday
+- Added `markWeeklySummaryShown()` / `hasWeeklySummaryBeenShown()` - Tracks weekly summary dismissal
+- Added `_scheduleWeeklyNotification()` - Schedules Monday 9am notification with last week's stats
+- Added WeekStart getter for calculating week boundaries
+- Integrated weekly notification scheduling in `loadData()` after data loads
+
+### notification_service.dart
+- Added `scheduleWeeklySummaryNotification()` - Schedules zoned notification for Mondays at 9am
+- Shows tasks completed, perfect days, and week-over-week comparison
+- Uses `matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime` for weekly repetition
+- Creates dedicated channel 'weekly_summary' for these notifications
+
+### stats_screen.dart
+- Added weekly summary card UI that appears at top of Stats screen on Mondays
+- Shows: Last week's tasks completed, perfect days, completion rate
+- Week-over-week comparison with color coding (green for improvement, red for decline, gray for same)
+- Dismissible via close button (stores state via SharedPreferences)
+- Manual refresh via icon button in title bar (allows replaying summary)
+- Gradient accent/success background matching app theme
+- Uses existing stat item styling for consistency
+
+### Widget Integration
+- Weekly summary scheduled in TaskProvider.loadData() after data loads
+- Works with existing notification system (no conflicts)
+- Only shows once per week unless dismissed manually
+- Settings allow configuring notification time (already existed for daily reminders)
+
+## Remaining Issues
+
+- None
+
+## Notes
+- Weekly summary respects user's notification preferences (only fires if enabled)
+- Summary shows data for previous Monday-Sunday week
+- Comparison calculates percentage change in completed tasks vs previous week
+- Notification fires every Monday at 9:00 AM local time
+- In-app summary can be dismissed for the week or replayed via refresh icon
+- Follows existing code patterns and styling conventions
+- Flutter analyze passes (only minor info-level warnings)
 
 ## Changes Made
 
@@ -148,6 +197,15 @@
 - Added `ScheduledNotificationReceiver` and `ScheduledNotificationBootReceiver` for reliable alarm catching
 - Commented out AdMob meta-data
 - Removed broken `workmanager` receiver proxies
+- Removed `com.google.android.gms.permission.AD_ID` per Play Console policy (no ads)
+
+### Phase 19 Enhancements (v1.1.0+3)
+- **main.dart**: Wrapped `NotificationService` initialization in a `try-catch` block to prevent app startup freezes due to Android background constraints.
+- **notification_service.dart**: Wrapped reminder scheduling in `try-catch` blocks to prevent execution halts.
+- **task_provider.dart**: Prevented past tasks from triggering Perfect Day streak logic or end-of-day reminders when toggled.
+- **history_detail_screen.dart**: Wrapped task cards in `GestureDetector` to enable task marking directly from the history view. Uses `Consumer<TaskProvider>` for real-time reactivity.
+- **home_screen.dart**: Revamped "Add Task" logic. Empty task slots (`_buildEmptySlot`) are now directly tappable. The "Add Extra Task" button is now visible simultaneously with the "All done" congratulation message.
+- **in_app_update**: Added package for immediate/flexible Google Play app updates on startup.
 
 ## Remaining Issues
 
