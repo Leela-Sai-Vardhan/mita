@@ -246,10 +246,12 @@ class _HomeScreenState extends State<HomeScreen> {
           _hintTask = task;
         });
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() {
-            _showSwipeHint = false;
-            _hintTask = null;
-          });
+          if (mounted) {
+            setState(() {
+              _showSwipeHint = false;
+              _hintTask = null;
+            });
+          }
         });
         return true;
       },
@@ -292,10 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
             _hintTask = task;
           });
           Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) setState(() {
-              _showSwipeHint = false;
-              _hintTask = null;
-            });
+            if (mounted) {
+              setState(() {
+                _showSwipeHint = false;
+                _hintTask = null;
+              });
+            }
           });
         },
         child: AnimatedContainer(

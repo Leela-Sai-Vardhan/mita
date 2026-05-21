@@ -40,8 +40,8 @@
 
 ## Current Work
 
-- **Status:** Phase 19 Complete - Production Stability achieved for v1.1.0+3
-- **Focus:** Fixing startup crash issues with error handling, enabling History task toggling, Add Task UI revamp, and Play Store AAB builds.
+- **Status:** Phase 20 Complete - Universal Android Compatibility achieved for v1.2.0+6
+- **Focus:** Preventing data persistence issues, time zone normalization mismatches, SQLite transaction safety, write-verification, database schema auto-healing, and production releases.
 
 ## Changes Made
 
@@ -206,6 +206,29 @@
 - **history_detail_screen.dart**: Wrapped task cards in `GestureDetector` to enable task marking directly from the history view. Uses `Consumer<TaskProvider>` for real-time reactivity.
 - **home_screen.dart**: Revamped "Add Task" logic. Empty task slots (`_buildEmptySlot`) are now directly tappable. The "Add Extra Task" button is now visible simultaneously with the "All done" congratulation message.
 - **in_app_update**: Added package for immediate/flexible Google Play app updates on startup.
+
+## Phase 20 Enhancements (v1.2.0+6) - Universal Android Compatibility & Reliability
+- **task_model.dart**:
+  - Implemented timezone-agnostic date normalization (`_normalizeDateToString`) for storing all DateTime values. Reconstructs Local DateTime before serialization to guarantee identical strings across all Android devices regardless of OS-level locale or timezone (e.g. `Z`, `+05:30`, `+00:00`).
+  - Fixed standard Dart `copyWith` bug that prevented resetting `completedAt` to `null` when a task is toggled back to incomplete.
+  - Fixed database factory parser type cast bug on dynamic `recurrence` values to prevent runtime index type crashes.
+- **database_helper.dart**:
+  - Bumped database version to `4`.
+  - Configured WAL (Write-Ahead Logging) journal mode and forced `PRAGMA synchronous = FULL` for durability and crash resilience against aggressive OEM battery killers (e.g. Samsung Device Care).
+  - Wrapped SQLite write operations (`createTask`, `updateTask`, `deleteTask`) in transactional scopes (`db.transaction()`) with a fallback bare write block in case of transaction failure.
+  - Implemented the **Write-Verify** pattern to query the database immediately after writes and confirm records were physically written before returning.
+  - Created a database migration to Version 4 that normalizes all pre-existing timezone-suffixed dates already stored in the DB.
+  - Implemented a proactive schema-verification check on database startup (`_verifySchema`) to automatically check for all 9 expected columns and auto-heal missing ones to prevent app crashes after updates.
+  - Upgraded date-range queries in `getTasksForDate()` to use both prefix `LIKE` comparison and range checking with deduplication to support both older timezone-suffixed date structures and new normalized strings.
+  - Created `getDiagnostics()` and `getTaskSafe(id)` methods for detailed monitoring and robust debugging.
+- **task_provider.dart**:
+  - Isolated non-critical operations (home widget sync, JSON backups, streaks, notifications) inside independent try-catch blocks to prevent critical database routines from failing.
+  - Added double write-verification checks upon adding tasks using `DatabaseHelper.instance.getTaskSafe(id)`.
+  - Fixed standard Flutter analyze warnings (e.g. `isNotEmpty` check) to achieve zero lint issues.
+- **home_screen.dart**:
+  - Cleaned up control structure flow braces to resolve lint warnings.
+- **pubspec.yaml**:
+  - Incremented package version to `1.2.0+6` for production build rollout.
 
 ## Remaining Issues
 

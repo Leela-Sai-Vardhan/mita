@@ -60,16 +60,56 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _loadTasks();
-      await _loadStreak();
-      await _loadAllTasks();
-      await _loadExtensionStatus();
+      // Log diagnostics at startup
+      try {
+        final diag = await DatabaseHelper.instance.getDiagnostics();
+        debugPrint('[TaskProvider] 📊 DB Diagnostics: $diag');
+      } catch (e) {
+        debugPrint('[TaskProvider] Diagnostics failed: $e');
+      }
 
-      await _updateEndOfDayReminder();
-      await updateHomeWidget();
-      await _scheduleWeeklyNotification();
+      // Load tasks first — most critical operation
+      await _loadTasks();
+      debugPrint('[TaskProvider] ✅ Today tasks loaded: ${_todayTasks.length}');
+      
+      // Load all tasks for history/stats
+      await _loadAllTasks();
+      debugPrint('[TaskProvider] ✅ All tasks loaded: ${_allTasks.length}');
+
+      // Load streak — non-critical, isolated
+      try {
+        await _loadStreak();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ Streak load failed (non-fatal): $e');
+      }
+
+      // Load extension status — non-critical, isolated
+      try {
+        await _loadExtensionStatus();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ Extension status load failed (non-fatal): $e');
+      }
+
+      // Schedule notifications — non-critical, isolated
+      try {
+        await _updateEndOfDayReminder();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ End-of-day reminder failed (non-fatal): $e');
+      }
+
+      try {
+        await updateHomeWidget();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ Home widget update failed (non-fatal): $e');
+      }
+
+      try {
+        await _scheduleWeeklyNotification();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ Weekly notification failed (non-fatal): $e');
+      }
     } catch (e, stackTrace) {
-      debugPrint('[TaskProvider] Error in loadData: $e\n$stackTrace');
+      debugPrint('[TaskProvider] ❌ CRITICAL error in loadData: $e\n$stackTrace');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -152,10 +192,20 @@ class TaskProvider with ChangeNotifier {
       recurrenceDays: recurrenceDays,
     );
 
+    // Create task with transaction-safe, write-verified insert
     final id = await DatabaseHelper.instance.createTask(newTask);
+
+    // Double-verify: read back from DB to confirm persistence
+    final verified = await DatabaseHelper.instance.getTaskSafe(id);
+    if (verified == null) {
+      debugPrint('[TaskProvider] ⚠️ Write verification failed for id=$id — task may not persist across restart');
+    } else {
+      debugPrint('[TaskProvider] ✅ Task fully verified in DB: id=$id, title="${verified.title}"');
+    }
+
     final savedTask = newTask.copyWith(id: id);
     _todayTasks.add(savedTask);
-    _allTasks.add(savedTask); // Update full history immediately
+    _allTasks.add(savedTask);
 
     if (isExtended) {
       final prefs = await SharedPreferences.getInstance();
@@ -163,12 +213,31 @@ class TaskProvider with ChangeNotifier {
       await prefs.setInt('todayExtensionUsed', _todayExtensionUsed);
     }
 
-    await NotificationService().scheduleTaskReminder(savedTask);
-    await _updateEndOfDayReminder();
+    try {
+      await NotificationService().scheduleTaskReminder(savedTask);
+    } catch (e) {
+      debugPrint('[TaskProvider] ⚠️ Task reminder scheduling failed (non-fatal): $e');
+    }
+
+    try {
+      await _updateEndOfDayReminder();
+    } catch (e) {
+      debugPrint('[TaskProvider] ⚠️ End-of-day reminder update failed (non-fatal): $e');
+    }
 
     notifyListeners();
-    await updateHomeWidget();
-    await JsonStorageService().saveToJson();
+
+    try {
+      await updateHomeWidget();
+    } catch (e) {
+      debugPrint('[TaskProvider] ⚠️ Home widget update failed (non-fatal): $e');
+    }
+
+    try {
+      await JsonStorageService().saveToJson();
+    } catch (e) {
+      debugPrint('[TaskProvider] ⚠️ JSON backup failed (non-fatal): $e');
+    }
   }
 
   Future<void> toggleTask(Task task) async {
@@ -307,9 +376,6 @@ class TaskProvider with ChangeNotifier {
       if (_streak > 0) _streak--;
       await prefs.setInt('streak', _streak);
       
-      // If we revert, we remove today's lastPerfectDay marker. 
-      // The actual previous perfect day is lost from prefs, so we just clear it or leave it null.
-      // Next time they get a perfect day, it will increment again.
       _lastPerfectDay = null;
       await prefs.remove('lastPerfectDay');
     }
@@ -493,7 +559,7 @@ class TaskProvider with ChangeNotifier {
   Future<void> updateHomeWidget() async {
     try {
       final completed = _todayTasks.where((t) => t.isCompleted).length;
-      final total = _todayTasks.length > 0 ? _todayTasks.length : 3;
+      final total = _todayTasks.isNotEmpty ? _todayTasks.length : 3;
       
       await HomeWidget.saveWidgetData<String>('widget_streak', '🔥 $_streak');
       await HomeWidget.saveWidgetData<String>('widget_progress', '$completed/$total tasks');
