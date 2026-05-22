@@ -214,7 +214,7 @@
   - Fixed database factory parser type cast bug on dynamic `recurrence` values to prevent runtime index type crashes.
 - **database_helper.dart**:
   - Bumped database version to `4`.
-  - Configured WAL (Write-Ahead Logging) journal mode and forced `PRAGMA synchronous = FULL` for durability and crash resilience against aggressive OEM battery killers (e.g. Samsung Device Care).
+  - Configured WAL (Write-Ahead Logging) journal mode and forced `PRAGMA synchronous = FULL` for durability and crash resilience against aggressive OEM battery killers (e.g. Samsung Device Care). Fixed Android SQLite database opening crash by executing these statements via `db.rawQuery()` instead of `db.execute()` (which crashed because PRAGMA statements return a result set, throwing `Queries can be performed using SQLiteDatabase query or rawQuery methods only`).
   - Wrapped SQLite write operations (`createTask`, `updateTask`, `deleteTask`) in transactional scopes (`db.transaction()`) with a fallback bare write block in case of transaction failure.
   - Implemented the **Write-Verify** pattern to query the database immediately after writes and confirm records were physically written before returning.
   - Created a database migration to Version 4 that normalizes all pre-existing timezone-suffixed dates already stored in the DB.

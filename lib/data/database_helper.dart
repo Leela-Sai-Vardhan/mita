@@ -33,9 +33,10 @@ class DatabaseHelper {
       onUpgrade: _migrateDatabase,
       onOpen: (db) async {
         // WAL mode for better concurrent read/write and crash resilience
-        await db.execute('PRAGMA journal_mode=WAL');
+        // Must use rawQuery instead of execute as PRAGMA journal_mode returns a result set
+        await db.rawQuery('PRAGMA journal_mode=WAL');
         // Force full fsync for durability (critical on Samsung)
-        await db.execute('PRAGMA synchronous=FULL');
+        await db.rawQuery('PRAGMA synchronous=FULL');
       },
     );
 
