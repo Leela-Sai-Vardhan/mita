@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'models/task_model.dart';
+import 'models/focus_session_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -28,7 +29,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 4, // Bumped for date normalization migration
+      version: 5, // Bumped for focus_sessions table
       onCreate: _createDB,
       onUpgrade: _migrateDatabase,
       onOpen: (db) async {
@@ -119,6 +120,30 @@ class DatabaseHelper {
         // Non-fatal — dates will still parse correctly via DateTime.parse()
       }
     }
+
+    if (oldVersion < 5) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS focus_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taskId INTEGER,
+            startedAt TEXT NOT NULL,
+            completedAt TEXT,
+            durationSec INTEGER NOT NULL,
+            elapsedSec INTEGER DEFAULT 0,
+            interruptions INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('[DB] Migration v5: created focus_sessions table');
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          debugPrint('[DB] Migration v5 CRITICAL error: $e');
+          rethrow;
+        }
+        debugPrint('[DB] Migration v5 skipped (table exists): $e');
+      }
+    }
   }
 
   /// Check if a date string has a timezone suffix like +05:30 or Z
@@ -168,6 +193,50 @@ class DatabaseHelper {
     } catch (e) {
       debugPrint('[DB] Schema verification error: $e');
     }
+
+    // Verify focus_sessions table schema
+    try {
+      final fsResult = await db.rawQuery("PRAGMA table_info('focus_sessions')");
+      if (fsResult.isEmpty) {
+        debugPrint('[DB] ⚠️ Table focus_sessions is missing! Creating it...');
+        await db.execute('''
+          CREATE TABLE focus_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taskId INTEGER,
+            startedAt TEXT NOT NULL,
+            completedAt TEXT,
+            durationSec INTEGER NOT NULL,
+            elapsedSec INTEGER DEFAULT 0,
+            interruptions INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('[DB] ✅ Created focus_sessions table.');
+      } else {
+        final fsColumns = fsResult.map((r) => r['name'] as String).toSet();
+        const expectedFsColumns = {
+          'id', 'taskId', 'startedAt', 'completedAt',
+          'durationSec', 'elapsedSec', 'interruptions', 'completed',
+        };
+        final fsMissing = expectedFsColumns.difference(fsColumns);
+        if (fsMissing.isNotEmpty) {
+          debugPrint('[DB] ⚠️ SCHEMA WARNING: focus_sessions missing columns: $fsMissing');
+          for (final col in fsMissing) {
+            try {
+              final type = col == 'completed' || col == 'durationSec' || col == 'elapsedSec' || col == 'interruptions' ? 'INTEGER DEFAULT 0' : 'TEXT';
+              await db.execute('ALTER TABLE focus_sessions ADD COLUMN $col $type');
+              debugPrint('[DB] ✅ Added missing column to focus_sessions: $col');
+            } catch (e) {
+              debugPrint('[DB] ❌ Failed to add column $col to focus_sessions: $e');
+            }
+          }
+        } else {
+          debugPrint('[DB] ✅ focus_sessions schema verified: ${expectedFsColumns.length} columns present');
+        }
+      }
+    } catch (e) {
+      debugPrint('[DB] focus_sessions schema verification error: $e');
+    }
   }
 
   String _getColumnType(String columnName) {
@@ -192,6 +261,19 @@ CREATE TABLE tasks (
   completedAt TEXT,
   recurrence INTEGER DEFAULT 0,
   recurrenceDays TEXT
+)
+''');
+
+    await db.execute('''
+CREATE TABLE focus_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  taskId INTEGER,
+  startedAt TEXT NOT NULL,
+  completedAt TEXT,
+  durationSec INTEGER NOT NULL,
+  elapsedSec INTEGER DEFAULT 0,
+  interruptions INTEGER DEFAULT 0,
+  completed INTEGER DEFAULT 0
 )
 ''');
   }
@@ -414,7 +496,7 @@ CREATE TABLE tasks (
         'dbPath': _dbPath,
         'totalTasks': count,
         'todayTasks': todayCount,
-        'dbVersion': 4,
+        'dbVersion': 5,
       };
     } catch (e) {
       return {'error': e.toString()};
@@ -424,6 +506,199 @@ CREATE TABLE tasks (
   String _todayPrefix() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<int> createFocusSession(FocusSession session) async {
+    final db = await instance.database;
+
+    try {
+      final id = await db.transaction<int>((txn) async {
+        final insertedId = await txn.insert('focus_sessions', session.toMap());
+
+        final verify = await txn.query(
+          'focus_sessions',
+          where: 'id = ?',
+          whereArgs: [insertedId],
+        );
+
+        if (verify.isEmpty) {
+          throw Exception('[DB] Write verification FAILED for focus_session id=$insertedId');
+        }
+
+        return insertedId;
+      });
+
+      debugPrint('[DB] Focus session created & verified: id=$id');
+      return id;
+    } catch (e) {
+      debugPrint('[DB] createFocusSession FAILED: $e');
+
+      try {
+        debugPrint('[DB] Retrying createFocusSession with bare insert...');
+        final retryId = await db.insert('focus_sessions', session.toMap());
+        final verify = await db.query('focus_sessions', where: 'id = ?', whereArgs: [retryId]);
+        if (verify.isNotEmpty) {
+          debugPrint('[DB] Retry succeeded: id=$retryId');
+          return retryId;
+        }
+      } catch (retryError) {
+        debugPrint('[DB] Retry also failed: $retryError');
+      }
+
+      rethrow;
+    }
+  }
+
+  Future<List<FocusSession>> getFocusSessions({int? taskId, int? limit}) async {
+    final db = await instance.database;
+
+    try {
+      final where = taskId != null ? 'taskId = ?' : null;
+      final whereArgs = taskId != null ? [taskId] : null;
+
+      final result = await db.query(
+        'focus_sessions',
+        where: where,
+        whereArgs: whereArgs,
+        orderBy: 'startedAt DESC',
+        limit: limit,
+      );
+
+      return result.map((json) => FocusSession.fromMap(json)).toList();
+    } catch (e) {
+      debugPrint('[DB] getFocusSessions error: $e');
+      return [];
+    }
+  }
+
+  Future<int> getFocusSessionCount(int taskId) async {
+    final db = await instance.database;
+    try {
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM focus_sessions WHERE taskId = ?',
+        [taskId],
+      );
+      return (result.first['cnt'] as int?) ?? 0;
+    } catch (e) {
+      debugPrint('[DB] getFocusSessionCount error: $e');
+      return 0;
+    }
+  }
+
+  Future<({int totalSessions, int completedSessions, int totalFocusSec, double avgDurationSec})>
+      getFocusSessionStats() async {
+    final db = await instance.database;
+    try {
+      final result = await db.rawQuery('''
+        SELECT
+          COUNT(*) as totalSessions,
+          SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completedSessions,
+          COALESCE(SUM(elapsedSec), 0) as totalFocusSec,
+          COALESCE(AVG(CASE WHEN completed = 1 THEN elapsedSec END), 0) as avgDurationSec
+        FROM focus_sessions
+      ''');
+      final row = result.first;
+      return (
+        totalSessions: (row['totalSessions'] as int?) ?? 0,
+        completedSessions: (row['completedSessions'] as int?) ?? 0,
+        totalFocusSec: (row['totalFocusSec'] as int?) ?? 0,
+        avgDurationSec: (row['avgDurationSec'] as num?)?.toDouble() ?? 0.0,
+      );
+    } catch (e) {
+      debugPrint('[DB] getFocusSessionStats error: $e');
+      return (totalSessions: 0, completedSessions: 0, totalFocusSec: 0, avgDurationSec: 0.0);
+    }
+  }
+
+  DateTime _parseLocalDateOnly(String dateStr) {
+    final parts = dateStr.split('-');
+    if (parts.length == 3) {
+      return DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
+    }
+    return DateTime.parse(dateStr).toLocal();
+  }
+
+  Future<Map<DateTime, int>> getFocusTimeByDay(int days) async {
+    final db = await instance.database;
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    try {
+      final result = await db.rawQuery('''
+        SELECT date(startedAt) as day, COALESCE(SUM(elapsedSec), 0) as totalSec
+        FROM focus_sessions
+        WHERE startedAt >= ?
+        GROUP BY day
+        ORDER BY day ASC
+      ''', [cutoff.toIso8601String()]);
+      return {
+        for (final row in result)
+          _parseLocalDateOnly(row['day'] as String): (row['totalSec'] as int?) ?? 0,
+      };
+    } catch (e) {
+      debugPrint('[DB] getFocusTimeByDay error: $e');
+      return {};
+    }
+  }
+
+  Future<Map<DateTime, int>> getSessionCountByDay(int days) async {
+    final db = await instance.database;
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    try {
+      final result = await db.rawQuery('''
+        SELECT date(startedAt) as day, COUNT(*) as sessionCount
+        FROM focus_sessions
+        WHERE startedAt >= ?
+        GROUP BY day
+        ORDER BY day ASC
+      ''', [cutoff.toIso8601String()]);
+      return {
+        for (final row in result)
+          _parseLocalDateOnly(row['day'] as String): (row['sessionCount'] as int?) ?? 0,
+      };
+    } catch (e) {
+      debugPrint('[DB] getSessionCountByDay error: $e');
+      return {};
+    }
+  }
+
+  Future<Map<DateTime, int>> getFocusTimeByWeek(int weeks) async {
+    final db = await instance.database;
+    final cutoff = DateTime.now().subtract(Duration(days: weeks * 7));
+    try {
+      final result = await db.rawQuery('''
+        SELECT
+          date(startedAt, 'weekday 0', '-7 days') as weekStart,
+          COALESCE(SUM(elapsedSec), 0) as totalSec
+        FROM focus_sessions
+        WHERE startedAt >= ?
+        GROUP BY weekStart
+        ORDER BY weekStart ASC
+      ''', [cutoff.toIso8601String()]);
+      return {
+        for (final row in result)
+          _parseLocalDateOnly(row['weekStart'] as String): (row['totalSec'] as int?) ?? 0,
+      };
+    } catch (e) {
+      debugPrint('[DB] getFocusTimeByWeek error: $e');
+      return {};
+    }
+  }
+
+  Future<int> clearFocusSessions() async {
+    final db = await instance.database;
+    try {
+      final rows = await db.transaction<int>((txn) async {
+        return await txn.delete('focus_sessions');
+      });
+      debugPrint('[DB] ✅ All focus sessions deleted: rows=$rows');
+      return rows;
+    } catch (e) {
+      debugPrint('[DB] ❌ clearFocusSessions FAILED: $e');
+      return await db.delete('focus_sessions');
+    }
   }
 
   Future close() async {

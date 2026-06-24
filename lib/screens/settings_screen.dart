@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:app_settings/app_settings.dart';
 import '../core/theme.dart';
 import '../providers/task_provider.dart';
+import '../providers/pomodoro_provider.dart';
 import '../data/database_helper.dart';
 import '../services/notification_service.dart';
 import '../services/backup_service.dart';
 import '../services/json_storage_service.dart';
+import '../services/rate_prompt_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -95,6 +97,13 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () => _showClearDataDialog(context),
                   ),
                   _SettingsTile(
+                    icon: Icons.clear_all,
+                    title: "Clear Today's Tasks",
+                    subtitle: 'Remove all tasks for today',
+                    iconColor: Colors.orangeAccent,
+                    onTap: () => _showClearTodayDialog(context),
+                  ),
+                  _SettingsTile(
                     icon: Icons.refresh,
                     title: 'Reset Streak',
                     subtitle: 'Reset current and best streak to 0',
@@ -116,8 +125,15 @@ class SettingsScreen extends StatelessWidget {
                   _SettingsTile(
                     icon: Icons.info_outline,
                     title: 'About',
-                    subtitle: 'Version 1.0.0',
+                    subtitle: 'v1.4.0+9',
                     onTap: () => _showAboutDialog(context),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.favorite_outline,
+                    title: 'Rate Us',
+                    subtitle: 'Support a student developer',
+                    iconColor: Colors.pinkAccent,
+                    onTap: () => RatePromptService().show(context),
                   ),
                   _SettingsTile(
                     icon: Icons.star_outline,
@@ -168,27 +184,69 @@ class SettingsScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              final db = DatabaseHelper.instance;
-              final allTasks = await db.getAllTasks();
-              for (final task in allTasks) {
-                if (task.id != null) {
-                  await db.deleteTask(task.id!);
-                }
+              await Provider.of<TaskProvider>(context, listen: false).clearAllData();
+              if (context.mounted) {
+                await Provider.of<PomodoroProvider>(context, listen: false).clearAll();
               }
-              await JsonStorageService().clearJson();
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
-                Provider.of<TaskProvider>(context, listen: false).loadData();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('All data cleared', style: GoogleFonts.dmSans(color: Colors.white)),
-                    backgroundColor: AppTheme.accent,
-                    behavior: SnackBarBehavior.floating,
+                  AppTheme.customSnackBar(
+                    message: 'All data cleared',
+                    context: context,
+                    icon: Icons.check_circle_outline,
+                    leftBarColor: AppTheme.success,
                   ),
                 );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text('Clear', style: GoogleFonts.dmSans(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearTodayDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text("Clear Today's Tasks?", style: GoogleFonts.spaceGrotesk(color: Colors.white)),
+        content: Text(
+          'This will remove all tasks for today. This cannot be undone.',
+          style: GoogleFonts.dmSans(color: AppTheme.mutedText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.dmSans(color: AppTheme.mutedText)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final provider = Provider.of<TaskProvider>(context, listen: false);
+              final todayTasks = provider.todayTasks;
+              for (final task in todayTasks) {
+                if (task.id != null) {
+                  await DatabaseHelper.instance.deleteTask(task.id!);
+                }
+              }
+              await JsonStorageService().clearJson();
+              await provider.loadData();
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  AppTheme.customSnackBar(
+                    message: "Today's tasks cleared",
+                    context: context,
+                    icon: Icons.check_circle_outline,
+                    leftBarColor: AppTheme.success,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
             child: Text('Clear', style: GoogleFonts.dmSans(color: Colors.white)),
           ),
         ],
@@ -221,9 +279,11 @@ class SettingsScreen extends StatelessWidget {
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Streak reset to 0', style: GoogleFonts.dmSans()),
-                    backgroundColor: AppTheme.surface,
+                  AppTheme.customSnackBar(
+                    message: 'Streak reset to 0',
+                    context: context,
+                    icon: Icons.refresh,
+                    leftBarColor: Colors.orangeAccent,
                   ),
                 );
               }
@@ -275,21 +335,11 @@ class SettingsScreen extends StatelessWidget {
     Future.delayed(Duration.zero, () {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.notifications_active, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Daily reminder set for $formattedTime',
-                  style: GoogleFonts.dmSans(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.accent,
-          behavior: SnackBarBehavior.floating,
+        AppTheme.customSnackBar(
+          message: 'Daily reminder set for $formattedTime',
+          context: context,
+          icon: Icons.notifications_active,
+          leftBarColor: AppTheme.accent,
           duration: const Duration(seconds: 3),
         ),
       );
@@ -449,18 +499,22 @@ class SettingsScreen extends StatelessWidget {
       await backupService.shareExport();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Data exported successfully!', style: GoogleFonts.dmSans()),
-            backgroundColor: AppTheme.success,
+          AppTheme.customSnackBar(
+            message: 'Data exported successfully!',
+            context: context,
+            icon: Icons.check_circle_outline,
+            leftBarColor: AppTheme.success,
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export failed: $e', style: GoogleFonts.dmSans()),
-            backgroundColor: Colors.red,
+          AppTheme.customSnackBar(
+            message: 'Export failed: $e',
+            context: context,
+            icon: Icons.error_outline,
+            leftBarColor: Colors.redAccent,
           ),
         );
       }
@@ -509,26 +563,34 @@ class SettingsScreen extends StatelessWidget {
         final messenger = ScaffoldMessenger.of(context);
         await provider.loadData();
         
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Data imported successfully!', style: GoogleFonts.dmSans()),
-            backgroundColor: AppTheme.success,
-          ),
-        );
+        if (context.mounted) {
+          messenger.showSnackBar(
+            AppTheme.customSnackBar(
+              message: 'Data imported successfully!',
+              context: context,
+              icon: Icons.check_circle_outline,
+              leftBarColor: AppTheme.success,
+            ),
+          );
+        }
       } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Import failed: Invalid file format', style: GoogleFonts.dmSans()),
-            backgroundColor: Colors.red,
+          AppTheme.customSnackBar(
+            message: 'Import failed: Invalid file format',
+            context: context,
+            icon: Icons.error_outline,
+            leftBarColor: Colors.redAccent,
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Import failed: $e', style: GoogleFonts.dmSans()),
-            backgroundColor: Colors.red,
+          AppTheme.customSnackBar(
+            message: 'Import failed: $e',
+            context: context,
+            icon: Icons.error_outline,
+            leftBarColor: Colors.redAccent,
           ),
         );
       }
@@ -616,18 +678,20 @@ class SettingsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Version 1.0.0',
-              style: GoogleFonts.dmSans(color: AppTheme.mutedText),
+              'v1.4.0+9',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Focus on what matters.\nThree tasks. One day.',
-              style: GoogleFonts.dmSans(color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Made with ❤️',
-              style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 14),
+              'ddvardhan2@gmail.com',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: AppTheme.mutedText,
+              ),
             ),
           ],
         ),
@@ -640,6 +704,7 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+
 }
 
 class _SettingsTile extends StatelessWidget {

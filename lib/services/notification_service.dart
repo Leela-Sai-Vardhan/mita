@@ -318,5 +318,39 @@ class NotificationService {
     );
   }
 
+  Future<void> scheduleFocusNotification(Duration duration, String taskTitle) async {
+    try {
+      await _notifications.cancel(999); // ID 999 for focus timer
 
+      final scheduledDate = tz.TZDateTime.now(tz.local).add(duration);
+
+      await _notifications.zonedSchedule(
+        999,
+        'Focus session complete! ☕',
+        'Great job focusing on: $taskTitle',
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'focus_reminders',
+            'Focus Session Reminders',
+            channelDescription: 'Alerts when your Pomodoro focus session finishes',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      debugPrint('[NotificationService] Zoned Focus Notification scheduled for $scheduledDate');
+    } catch (e) {
+      debugPrint('[NotificationService] Error scheduling focus notification: $e');
+    }
+  }
+
+  Future<void> cancelFocusNotification() async {
+    await _notifications.cancel(999);
+  }
 }

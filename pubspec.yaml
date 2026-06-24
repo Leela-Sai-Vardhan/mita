@@ -1,7 +1,7 @@
 name: mita
 description: "Mita — Focus on what matters. Three tasks, one day."
 publish_to: 'none'
-version: 1.2.0+6
+version: 1.4.0+9
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -43,10 +43,18 @@ dependencies:
   # URL Launcher (for battery settings)
   url_launcher: ^6.2.5
   app_settings: ^7.0.0
+  audioplayers: ^6.1.0
   in_app_update: ^4.2.5
 
   # Home Widget
   home_widget: ^0.7.0
+  in_app_review: ^2.0.9
+
+  # AdMob
+  google_mobile_ads: ^5.2.0
+
+  # Charts
+  fl_chart: ^0.69.2
 
 dev_dependencies:
   flutter_test:
@@ -55,3 +63,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/audio/
+    - assets/images/
+

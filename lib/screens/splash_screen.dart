@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import '../core/constants/storage_keys.dart';
+import 'onboarding/onboarding_screen.dart';
+import 'navigation_shell.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,14 +17,26 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToHome();
+    _navigate();
   }
 
-  Future<void> _navigateToHome() async {
+  Future<void> _navigate() async {
+    final prefsFuture = SharedPreferences.getInstance();
     await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    }
+    if (!mounted) return;
+    final prefs = await prefsFuture;
+    final hasSeen = prefs.getBool(StorageKeys.hasSeenOnboarding) ?? false;
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (_, __, ___) =>
+            hasSeen ? const MainNavigation() : const OnboardingScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
   }
 
   @override
@@ -31,21 +47,24 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.borderEmpty, width: 1.5),
-              ),
-              child: Center(
-                child: Text(
-                  '⊙',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.accent,
+            Hero(
+              tag: 'app_logo_hero',
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppTheme.borderEmpty, width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    '\u2299',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accent,
+                    ),
                   ),
                 ),
               ),
@@ -81,3 +100,5 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
+
+

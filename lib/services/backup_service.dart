@@ -20,11 +20,15 @@ class BackupService {
     final streak = prefs.getInt('streak') ?? 0;
     final bestStreak = prefs.getInt('bestStreak') ?? 0;
     final lastPerfectDay = prefs.getString('lastPerfectDay');
+    final isStreakFrozen = prefs.getBool('isStreakFrozen') ?? false;
+    final streakFrozenWeek = prefs.getInt('streakFrozenWeek');
+    final earnedMilestones = prefs.getString('earnedMilestones');
+    final streakHistory = prefs.getString('streakHistory');
     final notificationHour = prefs.getInt('notificationHour') ?? 9;
     final notificationMinute = prefs.getInt('notificationMinute') ?? 0;
 
     final exportData = {
-      'version': '1.0.0',
+      'version': '1.1.0',
       'exportDate': DateTime.now().toIso8601String(),
       'tasks': tasks.map((t) => {
         'title': t.title,
@@ -37,6 +41,10 @@ class BackupService {
         'streak': streak,
         'bestStreak': bestStreak,
         'lastPerfectDay': lastPerfectDay,
+        'isStreakFrozen': isStreakFrozen,
+        'streakFrozenWeek': streakFrozenWeek,
+        'earnedMilestones': earnedMilestones,
+        'streakHistory': streakHistory,
       },
       'settings': {
         'notificationHour': notificationHour,
@@ -121,6 +129,16 @@ class BackupService {
         await prefs.setInt('bestStreak', statsData['bestStreak'] as int? ?? 0);
         if (statsData['lastPerfectDay'] != null) {
           await prefs.setString('lastPerfectDay', statsData['lastPerfectDay'] as String);
+        }
+        await prefs.setBool('isStreakFrozen', statsData['isStreakFrozen'] as bool? ?? false);
+        if (statsData['streakFrozenWeek'] != null) {
+          await prefs.setInt('streakFrozenWeek', statsData['streakFrozenWeek'] as int);
+        }
+        if (statsData['earnedMilestones'] != null) {
+          await prefs.setString('earnedMilestones', statsData['earnedMilestones'] as String);
+        }
+        if (statsData['streakHistory'] != null) {
+          await prefs.setString('streakHistory', statsData['streakHistory'] as String);
         }
       }
 

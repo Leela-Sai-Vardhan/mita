@@ -5,9 +5,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/black"
-    android:padding="16dp">
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
 
+    <!-- Top Bar: Streak & Date -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -20,11 +21,11 @@
             android:layout_height="wrap_content"
             android:text="Loading..."
             android:textColor="#E94560"
-            android:textSize="16sp"
+            android:textSize="14sp"
             android:textStyle="bold"
             tools:text="🔥 5" />
 
-        <View
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_weight="1" />
@@ -35,19 +36,204 @@
             android:layout_height="wrap_content"
             android:text="Today"
             android:textColor="#888888"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
 
     </LinearLayout>
 
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="#222222" />
+
+    <!-- Static Task List Container -->
+    <LinearLayout
+        android:id="@+id/task_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
+
+        <!-- Task Row 1 -->
+        <LinearLayout
+            android:id="@+id/task_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/task_checkbox_1"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/ic_checkbox_unchecked"
+                android:contentDescription="Toggle Task 1" />
+
+            <TextView
+                android:id="@+id/task_title_1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Buy groceries for dinner" />
+
+        </LinearLayout>
+
+        <!-- Task Row 2 -->
+        <LinearLayout
+            android:id="@+id/task_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/task_checkbox_2"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/ic_checkbox_unchecked"
+                android:contentDescription="Toggle Task 2" />
+
+            <TextView
+                android:id="@+id/task_title_2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Finish writing draft paper" />
+
+        </LinearLayout>
+
+        <!-- Task Row 3 -->
+        <LinearLayout
+            android:id="@+id/task_row_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/task_checkbox_3"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/ic_checkbox_unchecked"
+                android:contentDescription="Toggle Task 3" />
+
+            <TextView
+                android:id="@+id/task_title_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Workout for 30 mins" />
+
+        </LinearLayout>
+
+        <!-- Task Row 4 -->
+        <LinearLayout
+            android:id="@+id/task_row_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/task_checkbox_4"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/ic_checkbox_unchecked"
+                android:contentDescription="Toggle Task 4" />
+
+            <TextView
+                android:id="@+id/task_title_4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Review PR changes" />
+
+        </LinearLayout>
+
+        <!-- Task Row 5 -->
+        <LinearLayout
+            android:id="@+id/task_row_5"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/task_checkbox_5"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/ic_checkbox_unchecked"
+                android:contentDescription="Toggle Task 5" />
+
+            <TextView
+                android:id="@+id/task_title_5"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="12.5sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Stretch and meditate" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Empty State -->
     <TextView
-        android:id="@+id/widget_progress"
-        android:layout_width="wrap_content"
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="--"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        tools:text="2/3 tasks" />
+        android:text="No tasks — you're free! 🎉"
+        android:textColor="#666666"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:paddingTop="8dp"
+        android:visibility="gone"
+        tools:visibility="visible" />
 
 </LinearLayout>

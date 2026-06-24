@@ -26,11 +26,15 @@ class JsonStorageService {
       final streak = prefs.getInt('streak') ?? 0;
       final bestStreak = prefs.getInt('bestStreak') ?? 0;
       final lastPerfectDay = prefs.getString('lastPerfectDay');
+      final isStreakFrozen = prefs.getBool('isStreakFrozen') ?? false;
+      final streakFrozenWeek = prefs.getInt('streakFrozenWeek');
+      final earnedMilestones = prefs.getString('earnedMilestones');
+      final streakHistory = prefs.getString('streakHistory');
       final notificationHour = prefs.getInt('notificationHour') ?? 7;
       final notificationMinute = prefs.getInt('notificationMinute') ?? 0;
 
       final exportData = {
-        'version': '1.1.0',
+        'version': '1.2.0',
         'lastSync': DateTime.now().toIso8601String(),
         'tasks': tasks.map((t) => {
           'id': t.id,
@@ -45,6 +49,10 @@ class JsonStorageService {
           'streak': streak,
           'bestStreak': bestStreak,
           'lastPerfectDay': lastPerfectDay,
+          'isStreakFrozen': isStreakFrozen,
+          'streakFrozenWeek': streakFrozenWeek,
+          'earnedMilestones': earnedMilestones,
+          'streakHistory': streakHistory,
         },
         'settings': {
           'notificationHour': notificationHour,

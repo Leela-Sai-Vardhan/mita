@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../data/models/task_model.dart';
 import '../providers/task_provider.dart';
+import '../services/ad_service.dart';
+import 'focus_screen.dart';
 
 class HistoryDetailScreen extends StatefulWidget {
   final DateTime date;
@@ -299,7 +301,19 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
     }
 
     return GestureDetector(
-      onTap: () => provider.toggleTask(task),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => FocusScreen(
+              taskId: task.id ?? 0,
+              taskTitle: task.title,
+              isCompleted: true, // historical tasks are always read-only
+            ),
+          ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -316,20 +330,58 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: task.isCompleted ? AppTheme.success : Colors.transparent,
-                    border: Border.all(
-                      color: task.isCompleted ? AppTheme.success : AppTheme.mutedText,
-                      width: 1.5,
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () async {
+                    if (task.isCompleted) {
+                      final confirm = await _showUnmarkConfirmationDialog(context);
+                      if (confirm == true && mounted) {
+                        _showRewardedAdAndToggle(context, provider, task);
+                      }
+                    } else {
+                      final dateString = DateFormat('yyyy-MM-dd').format(widget.date);
+                      final now = DateTime.now();
+                      final todayString = DateFormat('yyyy-MM-dd').format(now);
+                      final isPastDay = dateString.compareTo(todayString) < 0;
+
+                      if (isPastDay) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            AppTheme.customSnackBar(
+                              message: 'Cannot complete tasks from previous days.',
+                              context: context,
+                              icon: Icons.error_outline,
+                              leftBarColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+
+                      final confirm = await _showCompleteConfirmationDialog(context, task);
+                      if (confirm == true) {
+                        provider.toggleTask(task);
+                      }
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: task.isCompleted ? AppTheme.success : Colors.transparent,
+                        border: Border.all(
+                          color: task.isCompleted ? AppTheme.success : AppTheme.mutedText,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: task.isCompleted
+                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          : null,
                     ),
                   ),
-                  child: task.isCompleted
-                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -405,6 +457,86 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
       return '${duration.inHours}h ${duration.inMinutes % 60}m';
     }
     return '${duration.inMinutes}m';
+  }
+
+  Future<bool?> _showCompleteConfirmationDialog(BuildContext context, Task task) {
+    return AppTheme.showPremiumConfirmDialog(
+      context: context,
+      title: 'Mark as Complete?',
+      content: 'This task will be marked as completed. You cannot undo this action directly from Today.\n\nTo unmark this task later, you will need to watch a rewarded ad on the History screen.',
+      confirmLabel: 'Confirm',
+      headerIcon: Icons.check_circle_outline,
+      accentColor: AppTheme.success,
+    );
+  }
+
+  Future<bool?> _showUnmarkConfirmationDialog(BuildContext context) {
+    return AppTheme.showPremiumConfirmDialog(
+      context: context,
+      title: 'Unmark Completed Task?',
+      content: 'To mark this completed task as incomplete, you must watch a short rewarded ad. Do you want to proceed?',
+      confirmLabel: 'Watch Ad',
+      headerIcon: Icons.play_circle_outline,
+      accentColor: AppTheme.accent,
+    );
+  }
+
+  void _showRewardedAdAndToggle(BuildContext context, TaskProvider provider, Task task) {
+    if (!AdService().isRewardedReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        AppTheme.customSnackBar(
+          message: 'Ad not ready yet, try again in a moment',
+          context: context,
+          icon: Icons.info_outline,
+          leftBarColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24, height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+            ),
+            const SizedBox(width: 16),
+            Text('Loading ad...', style: GoogleFonts.dmSans(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    AdService().showRewardedAd(
+      onEarned: (amount) {
+        if (context.mounted) Navigator.pop(context); // Pop loading dialog
+        provider.toggleTask(task);
+        ScaffoldMessenger.of(context).showSnackBar(
+          AppTheme.customSnackBar(
+            message: 'Task unmarked successfully!',
+            context: context,
+            icon: Icons.check_circle_outline,
+            leftBarColor: AppTheme.success,
+          ),
+        );
+      },
+      onAdFailed: () {
+        if (context.mounted) Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          AppTheme.customSnackBar(
+            message: 'Ad failed to load. Please try again.',
+            context: context,
+            icon: Icons.error_outline,
+            leftBarColor: Colors.redAccent,
+          ),
+        );
+      },
+    );
   }
 }
 

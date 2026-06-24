@@ -42,9 +42,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     await _loadHistory();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unlocked 7 more days of history!', style: GoogleFonts.dmSans()),
-          backgroundColor: AppTheme.success,
+        AppTheme.customSnackBar(
+          message: 'Unlocked 7 more days of history!',
+          context: context,
+          icon: Icons.check_circle_outline,
+          leftBarColor: AppTheme.success,
         ),
       );
     }
@@ -87,21 +89,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.history, size: 48, color: AppTheme.mutedText),
-          const SizedBox(height: 16),
+          Container(
+            width: 72, height: 72,
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Icon(Icons.history, size: 36, color: AppTheme.mutedText),
+          ),
+          const SizedBox(height: 20),
           Text(
             'No history yet',
-            style: GoogleFonts.dmSans(
-              fontSize: 16,
-              color: AppTheme.mutedText,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Complete tasks to see your history',
+            'Complete your 3 daily tasks and watch\nyour history grow day by day.',
+            textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 14,
-              color: AppTheme.placeholderText,
+              color: AppTheme.mutedText,
+              height: 1.5,
             ),
           ),
         ],

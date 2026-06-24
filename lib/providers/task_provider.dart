@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'package:home_widget/home_widget.dart';
+import 'package:in_app_review/in_app_review.dart';
+import 'package:intl/intl.dart';
 import '../data/database_helper.dart';
 import '../data/models/task_model.dart';
 import '../services/notification_service.dart';
 import '../services/json_storage_service.dart';
+import '../services/rate_prompt_service.dart';
+import '../core/streak_milestones.dart';
 
 class TaskProvider with ChangeNotifier {
   List<Task> _todayTasks = [];
@@ -14,6 +19,11 @@ class TaskProvider with ChangeNotifier {
   bool _isLoading = true;
   DateTime? _lastPerfectDay;
   int _todayExtensionUsed = 0;
+  bool _isStreakFrozen = false;
+  int? _streakFrozenWeek;
+  Set<int> _earnedMilestones = {};
+  List<String> _streakHistory = [];
+  int? _pendingMilestoneCelebration;
 
   List<Task> get todayTasks => _todayTasks;
   List<Task> get allTasks => _allTasks;
@@ -22,14 +32,35 @@ class TaskProvider with ChangeNotifier {
   DateTime? get lastPerfectDay => _lastPerfectDay;
   bool get isLoading => _isLoading;
   int get todayExtensionUsed => _todayExtensionUsed;
+  bool get isStreakFrozen => _isStreakFrozen;
+  int? get streakFrozenWeek => _streakFrozenWeek;
+  Set<int> get earnedMilestones => _earnedMilestones;
+  List<String> get streakHistory => _streakHistory;
+  int? get pendingMilestoneCelebration => _pendingMilestoneCelebration;
+  String get streakEmoji => _isStreakFrozen ? '⏳' : '🔥';
 
-  bool get isPerfectDay => _todayTasks.length >= 3 && _todayTasks.where((t) => t.isCompleted).length == 3 && _todayTasks.length <= 3;
+  bool get isPerfectDay => _todayTasks.length >= 3 && _todayTasks.where((t) => t.isCompleted).length >= 3;
+  void clearMilestoneCelebration() {
+    _pendingMilestoneCelebration = null;
+    notifyListeners();
+  }
+
   bool get isFullPerfectDay => _todayTasks.isNotEmpty && _todayTasks.every((t) => t.isCompleted);
   int get completedCount => _todayTasks.where((t) => t.isCompleted).length;
   bool get canAddTask => _todayTasks.length < 5;
   bool get canAddRegularTask => _todayTasks.length < 3;
   bool get canExtendTask => _todayTasks.length >= 3 && _todayTasks.length < 5 && _todayExtensionUsed < 2;
   int get remainingSlots => 5 - _todayTasks.length;
+
+  void grantExtensionSlot() {
+    if (_todayExtensionUsed < 2) {
+      _todayExtensionUsed++;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setInt('todayExtensionUsed', _todayExtensionUsed);
+      });
+      notifyListeners();
+    }
+  }
 
   DateTime get endOfDay {
     final now = DateTime.now();
@@ -79,6 +110,7 @@ class TaskProvider with ChangeNotifier {
       // Load streak — non-critical, isolated
       try {
         await _loadStreak();
+        await _checkStreakFreeze();
       } catch (e) {
         debugPrint('[TaskProvider] ⚠️ Streak load failed (non-fatal): $e');
       }
@@ -152,6 +184,33 @@ class TaskProvider with ChangeNotifier {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
+  String _getDateKey(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  int _getIsoWeek(DateTime date) {
+    final dayOfYear = int.parse(DateFormat('D').format(date));
+    final weekOfYear = ((dayOfYear - date.weekday + 10) / 7).floor();
+    return weekOfYear;
+  }
+
+  Future<void> _saveStreakPrefs([SharedPreferences? prefs]) async {
+    final p = prefs ?? await SharedPreferences.getInstance();
+    await p.setInt('streak', _streak);
+    await p.setInt('bestStreak', _bestStreak);
+    if (_lastPerfectDay != null) {
+      await p.setString('lastPerfectDay', _getDateKey(_lastPerfectDay!));
+    } else {
+      await p.remove('lastPerfectDay');
+    }
+    await p.setBool('isStreakFrozen', _isStreakFrozen);
+    if (_streakFrozenWeek != null) {
+      await p.setInt('streakFrozenWeek', _streakFrozenWeek!);
+    } else {
+      await p.remove('streakFrozenWeek');
+    }
+  }
+
   Future<void> _loadTasks() async {
     final now = DateTime.now();
     _todayTasks = await DatabaseHelper.instance.getTasksForDate(now);
@@ -168,6 +227,20 @@ class TaskProvider with ChangeNotifier {
     final lastPerfectDayStr = prefs.getString('lastPerfectDay');
     if (lastPerfectDayStr != null) {
       _lastPerfectDay = DateTime.tryParse(lastPerfectDayStr);
+    }
+    _isStreakFrozen = prefs.getBool('isStreakFrozen') ?? false;
+    _streakFrozenWeek = prefs.getInt('streakFrozenWeek');
+    if (_streakFrozenWeek == 0) _streakFrozenWeek = null;
+
+    final milestonesJson = prefs.getString('earnedMilestones');
+    if (milestonesJson != null) {
+      final list = jsonDecode(milestonesJson) as List;
+      _earnedMilestones = list.map((e) => e as int).toSet();
+    }
+
+    final historyJson = prefs.getString('streakHistory');
+    if (historyJson != null) {
+      _streakHistory = (jsonDecode(historyJson) as List).cast<String>();
     }
   }
 
@@ -207,12 +280,6 @@ class TaskProvider with ChangeNotifier {
     _todayTasks.add(savedTask);
     _allTasks.add(savedTask);
 
-    if (isExtended) {
-      final prefs = await SharedPreferences.getInstance();
-      _todayExtensionUsed++;
-      await prefs.setInt('todayExtensionUsed', _todayExtensionUsed);
-    }
-
     try {
       await NotificationService().scheduleTaskReminder(savedTask);
     } catch (e) {
@@ -237,6 +304,31 @@ class TaskProvider with ChangeNotifier {
       await JsonStorageService().saveToJson();
     } catch (e) {
       debugPrint('[TaskProvider] ⚠️ JSON backup failed (non-fatal): $e');
+    }
+  }
+
+  Future<void> _checkStreakFreeze() async {
+    if (_streak <= 0) return;
+    if (isPerfectDay) return;
+
+    final String todayStr = _getTodayKey();
+    if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) return;
+
+    final now = DateTime.now();
+    final currentWeek = _getIsoWeek(now);
+
+    if (_streakFrozenWeek == currentWeek) {
+      _streak = 0;
+      _lastPerfectDay = null;
+      _isStreakFrozen = false;
+      _streakFrozenWeek = null;
+      await _saveStreakPrefs();
+      debugPrint('[TaskProvider] 🔴 Streak reset: second freeze this week');
+    } else {
+      _streakFrozenWeek = currentWeek;
+      _isStreakFrozen = true;
+      await _saveStreakPrefs();
+      debugPrint('[TaskProvider] ⏳ Streak frozen: first miss this week');
     }
   }
 
@@ -275,7 +367,35 @@ class TaskProvider with ChangeNotifier {
     }
 
     notifyListeners();
+    try {
+      await updateHomeWidget();
+    } catch (e) {
+      debugPrint('[TaskProvider] Widget sync failed: $e');
+    }
     await JsonStorageService().saveToJson();
+
+    if (updatedTask.isCompleted) {
+      _requestInAppReview();
+      RatePromptService().incrementTasksCompleted();
+    }
+  }
+
+  Future<void> _requestInAppReview() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasRequested = prefs.getBool('has_requested_first_task_review') ?? false;
+      if (!hasRequested) {
+        final InAppReview inAppReview = InAppReview.instance;
+        if (await inAppReview.isAvailable()) {
+          // Delay briefly to allow completion animations to finish smoothly
+          await Future.delayed(const Duration(milliseconds: 800));
+          await inAppReview.requestReview();
+          await prefs.setBool('has_requested_first_task_review', true);
+        }
+      }
+    } catch (e) {
+      debugPrint('[InAppReview] Error requesting review: $e');
+    }
   }
 
   Future<void> _handleRecurrence(Task task) async {
@@ -369,15 +489,12 @@ class TaskProvider with ChangeNotifier {
   Future<void> _checkRevertStreak() async {
     final prefs = await SharedPreferences.getInstance();
     final lastPerfectDayStr = prefs.getString('lastPerfectDay');
-    final now = DateTime.now();
-    final String todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final String todayStr = _getTodayKey();
 
     if (lastPerfectDayStr == todayStr) {
       if (_streak > 0) _streak--;
-      await prefs.setInt('streak', _streak);
-      
       _lastPerfectDay = null;
-      await prefs.remove('lastPerfectDay');
+      await _saveStreakPrefs(prefs);
     }
   }
 
@@ -385,7 +502,7 @@ class TaskProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final lastPerfectDayStr = prefs.getString('lastPerfectDay');
     final now = DateTime.now();
-    final String todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final String todayStr = _getTodayKey();
 
     if (lastPerfectDayStr != todayStr) {
       _streak++;
@@ -398,6 +515,28 @@ class TaskProvider with ChangeNotifier {
 
       _lastPerfectDay = now;
       await prefs.setString('lastPerfectDay', todayStr);
+
+      // Unfreeze if frozen
+      if (_isStreakFrozen) {
+        _isStreakFrozen = false;
+        _streakFrozenWeek = null;
+        await prefs.remove('streakFrozenWeek');
+        await prefs.setBool('isStreakFrozen', false);
+      }
+
+      // Track streak history
+      if (!_streakHistory.contains(todayStr)) {
+        _streakHistory.add(todayStr);
+        if (_streakHistory.length > 365) _streakHistory.removeAt(0);
+        await prefs.setString('streakHistory', jsonEncode(_streakHistory));
+      }
+
+      // Check milestone
+      if (StreakMilestones.isMilestoneDay(_streak) && !_earnedMilestones.contains(_streak)) {
+        _earnedMilestones.add(_streak);
+        await prefs.setString('earnedMilestones', jsonEncode(_earnedMilestones.toList()));
+        _pendingMilestoneCelebration = _streak;
+      }
     }
   }
 
@@ -436,30 +575,94 @@ class TaskProvider with ChangeNotifier {
     _streak = 0;
     _bestStreak = 0;
     _lastPerfectDay = null;
+    _isStreakFrozen = false;
+    _streakFrozenWeek = null;
+    _pendingMilestoneCelebration = null;
     await prefs.setInt('streak', 0);
     await prefs.setInt('bestStreak', 0);
     await prefs.remove('lastPerfectDay');
+    await prefs.setBool('isStreakFrozen', false);
+    await prefs.remove('streakFrozenWeek');
     notifyListeners();
     await JsonStorageService().saveToJson();
   }
 
-  Map<DateTime, bool> getHeatmapData({int days = 30}) {
+  Future<void> clearAllData() async {
+    // 1. Delete all tasks from SQLite
+    final db = DatabaseHelper.instance;
+    final allTasksList = await db.getAllTasks();
+    for (final task in allTasksList) {
+      if (task.id != null) {
+        await db.deleteTask(task.id!);
+      }
+    }
+
+    // 2. Delete all focus sessions from SQLite
+    await db.clearFocusSessions();
+
+    // 3. Clear local JSON storage
+    await JsonStorageService().clearJson();
+
+    // 4. Reset SharedPreferences (preserving onboarding status)
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+    await prefs.clear();
+    if (hasSeenOnboarding) {
+      await prefs.setBool('hasSeenOnboarding', true);
+    }
+
+    // 5. Reset local memory state
+    _todayTasks.clear();
+    _allTasks.clear();
+    _streak = 0;
+    _bestStreak = 0;
+    _lastPerfectDay = null;
+    _todayExtensionUsed = 0;
+    _isStreakFrozen = false;
+    _streakFrozenWeek = null;
+    _earnedMilestones.clear();
+    _streakHistory.clear();
+    _pendingMilestoneCelebration = null;
+
+    // 6. Refresh reminders & home widget
+    try {
+      await NotificationService().scheduleEndOfDayReminder(_todayTasks);
+    } catch (_) {}
+    try {
+      await updateHomeWidget();
+    } catch (_) {}
+
+    notifyListeners();
+  }
+
+  Map<DateTime, double> getHeatmapData({int days = 90}) {
     final now = DateTime.now();
     final startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1));
-    final Map<DateTime, bool> heatmap = {};
+    final Map<DateTime, List<bool>> dayTaskStatus = {};
 
     for (int i = 0; i < days; i++) {
       final date = startDate.add(Duration(days: i));
       final normalizedDate = DateTime(date.year, date.month, date.day);
-      heatmap[normalizedDate] = false;
+      dayTaskStatus[normalizedDate] = [];
     }
 
     for (final task in _allTasks) {
       final normalizedTaskDate = DateTime(task.date.year, task.date.month, task.date.day);
       if (normalizedTaskDate.isAfter(startDate) || normalizedTaskDate.isAtSameMomentAs(startDate)) {
-        if (heatmap.containsKey(normalizedTaskDate)) {
-          heatmap[normalizedTaskDate] = heatmap[normalizedTaskDate]! || task.isCompleted;
+        if (dayTaskStatus.containsKey(normalizedTaskDate)) {
+          dayTaskStatus[normalizedTaskDate]!.add(task.isCompleted);
         }
+      }
+    }
+
+    final Map<DateTime, double> heatmap = {};
+    for (final entry in dayTaskStatus.entries) {
+      final tasks = entry.value;
+      if (tasks.isEmpty) {
+        heatmap[entry.key] = 0.0;
+      } else {
+        final completed = tasks.where((t) => t).length;
+        heatmap[entry.key] = completed / tasks.length;
       }
     }
 
@@ -561,9 +764,21 @@ class TaskProvider with ChangeNotifier {
       final completed = _todayTasks.where((t) => t.isCompleted).length;
       final total = _todayTasks.isNotEmpty ? _todayTasks.length : 3;
       
-      await HomeWidget.saveWidgetData<String>('widget_streak', '🔥 $_streak');
+      final streakEmoji = _isStreakFrozen ? '⏳' : '🔥';
+      await HomeWidget.saveWidgetData<String>('widget_streak', '$streakEmoji $_streak');
       await HomeWidget.saveWidgetData<String>('widget_progress', '$completed/$total tasks');
       await HomeWidget.saveWidgetData<String>('widget_date', _formatDate());
+      
+      final taskList = _todayTasks.map((t) => {
+        'id': t.id,
+        'title': t.title,
+        'isCompleted': t.isCompleted,
+      }).toList();
+      try {
+        await HomeWidget.saveWidgetData<String>('widget_task_list', jsonEncode(taskList));
+      } catch (e) {
+        debugPrint('HomeWidget task list save error: $e');
+      }
       
       await HomeWidget.updateWidget(
         androidName: 'HomeWidgetProvider',
