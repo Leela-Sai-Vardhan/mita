@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database_helper.dart';
 import '../data/models/task_model.dart';
 import '../data/models/focus_session_model.dart';
+import '../core/streak_data_store.dart';
 
 class StatsProvider extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -251,16 +250,14 @@ class StatsProvider extends ChangeNotifier {
   }
 
   Future<void> _loadStreakPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    streak = prefs.getInt('streak') ?? 0;
-    bestStreak = prefs.getInt('bestStreak') ?? 0;
-    final lastPerfectDayStr = prefs.getString('lastPerfectDay');
+    final state = await StreakDataStore.load();
+    streak = state['streak'] as int? ?? 0;
+    bestStreak = state['bestStreak'] as int? ?? 0;
+    final lastPerfectDayStr = state['lastPerfectDay'] as String?;
     if (lastPerfectDayStr != null) {
       lastPerfectDay = DateTime.tryParse(lastPerfectDayStr);
     }
-    final historyJson = prefs.getString('streakHistory');
-    if (historyJson != null) {
-      streakHistory = (jsonDecode(historyJson) as List).cast<String>();
-    }
+    final history = state['streakHistory'] as List? ?? const [];
+    streakHistory = history.cast<String>();
   }
 }

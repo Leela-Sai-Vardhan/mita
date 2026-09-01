@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database_helper.dart';
+import '../core/streak_data_store.dart';
 
 class JsonStorageService {
   static final JsonStorageService _instance = JsonStorageService._internal();
@@ -23,13 +24,13 @@ class JsonStorageService {
       final tasks = await db.getAllTasks();
       
       final prefs = await SharedPreferences.getInstance();
-      final streak = prefs.getInt('streak') ?? 0;
-      final bestStreak = prefs.getInt('bestStreak') ?? 0;
-      final lastPerfectDay = prefs.getString('lastPerfectDay');
-      final isStreakFrozen = prefs.getBool('isStreakFrozen') ?? false;
-      final streakFrozenWeek = prefs.getInt('streakFrozenWeek');
-      final earnedMilestones = prefs.getString('earnedMilestones');
-      final streakHistory = prefs.getString('streakHistory');
+      final streak = await StreakDataStore.streak();
+      final bestStreak = await StreakDataStore.bestStreak();
+      final lastPerfectDay = await StreakDataStore.lastPerfectDay();
+      final isStreakFrozen = await StreakDataStore.isFrozen();
+      final streakFrozenWeek = await StreakDataStore.frozenWeek();
+      final earnedMilestones = await StreakDataStore.earnedMilestonesJson();
+      final streakHistory = await StreakDataStore.streakHistoryJson();
       final notificationHour = prefs.getInt('notificationHour') ?? 7;
       final notificationMinute = prefs.getInt('notificationMinute') ?? 0;
 

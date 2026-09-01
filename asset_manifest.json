@@ -1,0 +1,141 @@
+{
+  "package": "Mitzy: Winter Arc Edition",
+  "version": "1.0.0",
+  "app": "Mita (com.dreamstarx.mita)",
+  "description": "Seasonal cozy variant of the Mitzy mascot shown during the Winter Arc season (Dec 1 - end of February). Delivered by the design team as individual PNG files with transparency, a native 8% mint-tinted circular background, and 2px line-art style, consumed from assets/images/.",
+  "placement": {
+    "seasonal_window": {
+      "rule": "Month == 12 OR Month <= 2",
+      "resolver": "lib/core/mitzy_assets.dart",
+      "resolver_class": "MitzyAssets",
+      "resolver_methods": {
+        "resolve(date)": "Returns winter arc asset during season if its file exists, else standard banner",
+        "isWinterArcSeason(date)": "Boolean: whether a date is in the winter arc window",
+        "winterIsAvailable(date)": "Boolean: seasonal window AND asset file exists",
+        "variantPath(key)": "Returns the asset path for a named variant (cozy/frosty/scarf)"
+      }
+    },
+    "screens": [
+      {
+        "screen": "splash_screen",
+        "file": "lib/screens/splash_screen.dart",
+        "usage": "56x56 logical px, right of the 'Meet Mitzy' pill on splash screen",
+        "existing_asset": "mitzy_rate.png"
+      },
+      {
+        "screen": "rate_prompt_dialog",
+        "file": "lib/services/rate_prompt_service.dart",
+        "usage": "100x100 logical px circular avatar above 'Enjoying Mita?' dialog",
+        "existing_asset": "mitzy_rate.png"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "name": "Winter Arc Mitzy - Cozy (Hot Cocoa)",
+      "filename": "mitzy_winter_arc_cozy.png",
+      "category": "character",
+      "variant": "cozy",
+      "path": "assets/images/mitzy_winter_arc_cozy.png",
+      "format": "png",
+      "dimensions_px": "306x300",
+      "transparency": true,
+      "native_background": "8% opacity mint-tinted circle (do NOT add another bounding box)",
+      "purpose": "Primary Winter Arc mascot (Cozy & Hot Cocoa), shown during winter season in splash + rate prompt",
+      "recommended_display_size": "56x56 logical px (splash), 100x100 (rate dialog circle)",
+      "line_style": "2px solid #0D0D0D outlines, transparent fill",
+      "palette": {
+        "lines": "#0D0D0D",
+        "primary_accent": "#69F0AE",
+        "frost_accent": "#80D8FF",
+        "warm_accent": "#FFD700",
+        "highlights": "#FFFFFF"
+      },
+      "props": [
+        "knit beanie",
+        "hot cocoa mug with steam (deep work / cold mornings)"
+      ],
+      "expression": "Focused / locked-in eyes with a small determined smirk",
+      "animation": {
+        "name": "winter_loop",
+        "duration": "3s loop",
+        "motion": "gentle vertical float (approx Offset(0, 0.03))"
+      },
+      "do_not": ["crop", "add an extra background", "change colors", "stretch / distort aspect ratio", "merge with other assets"],
+      "flutter_usage": "Image.asset(MitzyAssets.resolve(date))"
+    },
+    {
+      "name": "Winter Arc Mitzy - Frosty (Snowflake)",
+      "filename": "mitzy_winter_arc_frosty.png",
+      "category": "character",
+      "variant": "frosty",
+      "path": "assets/images/mitzy_winter_arc_frosty.png",
+      "format": "png",
+      "dimensions_px": "300x300",
+      "transparency": true,
+      "native_background": "8% opacity mint-tinted circle (do NOT add another bounding box)",
+      "purpose": "Winter Arc mascot (Focus & Snowflake), alternate seasonal variant",
+      "recommended_display_size": "56x56 logical px (splash), 100x100 (rate dialog circle)",
+      "line_style": "2px solid #0D0D0D outlines, transparent fill",
+      "palette": {
+        "lines": "#0D0D0D",
+        "primary_accent": "#69F0AE",
+        "frost_accent": "#80D8FF",
+        "warm_accent": "#FFD700",
+        "highlights": "#FFFFFF"
+      },
+      "props": [
+        "knit beanie",
+        "stylized snowflake (#FFD700 gold / #80D8FF frost) peeking from bottom corner"
+      ],
+      "expression": "Focused / locked-in eyes with frost sparkles",
+      "animation": {
+        "name": "winter_loop",
+        "duration": "3s loop",
+        "motion": "gentle vertical float (approx Offset(0, 0.03))"
+      },
+      "do_not": ["crop", "add an extra background", "change colors", "stretch / distort aspect ratio", "merge with other assets"],
+      "flutter_usage": "Image.asset(MitzyAssets.variantPath('frosty'))"
+    },
+    {
+      "name": "Winter Arc Mitzy - Scarf (Locked In)",
+      "filename": "mitzy_winter_arc_scarf.png",
+      "category": "character",
+      "variant": "scarf",
+      "path": "assets/images/mitzy_winter_arc_scarf.png",
+      "format": "png",
+      "dimensions_px": "300x300",
+      "transparency": true,
+      "native_background": "8% opacity mint-tinted circle (do NOT add another bounding box)",
+      "purpose": "Winter Arc mascot (Locked In & Scarf), alternate seasonal variant",
+      "recommended_display_size": "56x56 logical px (splash), 100x100 (rate dialog circle)",
+      "line_style": "2px solid #0D0D0D outlines, transparent fill",
+      "palette": {
+        "lines": "#0D0D0D",
+        "primary_accent": "#69F0AE",
+        "frost_accent": "#80D8FF",
+        "warm_accent": "#FFD700",
+        "highlights": "#FFFFFF"
+      },
+      "props": [
+        "knit beanie",
+        "wrapped mint-green (#69F0AE) scarf with tail ends hanging down"
+      ],
+      "expression": "Focused / locked-in eyes",
+      "animation": {
+        "name": "winter_loop",
+        "duration": "3s loop",
+        "motion": "gentle vertical float (approx Offset(0, 0.03))"
+      },
+      "do_not": ["crop", "add an extra background", "change colors", "stretch / distort aspect ratio", "merge with other assets"],
+      "flutter_usage": "Image.asset(MitzyAssets.variantPath('scarf'))"
+    }
+  ],
+  "notes_for_ai_agent": [
+    "The seasonal resolver (lib/core/mitzy_assets.dart) already swaps to the winter assets during Dec-Feb.",
+    "Delivered PNGs live in assets/images/ (pubspec already bundles that whole folder, so no pubspec change needed).",
+    "The assets natively include a subtle 8% mint-tinted circular background - do NOT wrap them in an extra circle/bounding box in the UI.",
+    "The design team also produced SVG sources and recommended flutter_svg; if SVG files are added later under assets/images/characters/, update pubspec accordingly.",
+    "Current season test: today is Aug 31 (month 8) - NOT winter arc, so resolve() returns the standard banner. To visually verify winter art, temporarily pass a December date."
+  ]
+}

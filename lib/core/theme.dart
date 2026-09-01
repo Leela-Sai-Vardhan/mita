@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/remote_config_service.dart';
 
 class AppTheme {
+  static const String appVersion = '2.0.0+11';
   static const Color background = Color(0xFF0D0D0D);
   static const Color surface = Color(0xFF1A1A1A);
   static const Color accent = Color(0xFFE94560);
@@ -75,6 +77,74 @@ class AppTheme {
       dismissDirection: DismissDirection.down,
     ),
   );
+
+  /// Builds the app [ThemeData] from remote configuration, falling back to
+  /// the baked-in defaults when config is unavailable. Call this on startup
+  /// and again whenever the remote config refreshes (live re-theme).
+  static ThemeData buildTheme({RemoteConfigService? config}) {
+    final rc = config ?? RemoteConfigService.instance;
+    final bg = rc.backgroundColor;
+    final surface = rc.surfaceColor;
+    final accent = rc.accentColor;
+    final success = rc.successColor;
+    final muted = rc.mutedTextColor;
+
+    final colorScheme = ColorScheme.dark(
+      primary: accent,
+      surface: surface,
+      secondary: success,
+      onPrimary: Colors.white,
+      onSurface: Colors.white,
+      onSecondary: Colors.black87,
+    );
+
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: bg,
+      primaryColor: accent,
+      colorScheme: colorScheme,
+      textTheme: TextTheme(
+        displayLarge: GoogleFonts.spaceGrotesk(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+        displayMedium: GoogleFonts.spaceGrotesk(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+        bodyLarge: GoogleFonts.dmSans(
+          color: Colors.white,
+        ),
+        bodyMedium: GoogleFonts.dmSans(
+          color: Colors.white,
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: surface,
+        elevation: 0,
+        titleTextStyle: GoogleFonts.spaceGrotesk(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        dismissDirection: DismissDirection.down,
+      ),
+      // Pass remote colors into the widget tree via the theme so screens that
+      // read `Theme.of(context)` can honour live re-theme.
+      extensions: [
+        RemoteThemeColors(
+          background: bg,
+          surface: surface,
+          accent: accent,
+          success: success,
+          mutedText: muted,
+        ),
+      ],
+    );
+  }
 
   static Future<bool?> showPremiumConfirmDialog({
     required BuildContext context,
@@ -262,6 +332,55 @@ class AppTheme {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Provides the remote-config theme colors to descendants via
+/// `Theme.of(context).extension<RemoteThemeColors>()`. This lets widgets honor
+/// live re-theme without refactoring the static [AppTheme] constants.
+@immutable
+class RemoteThemeColors extends ThemeExtension<RemoteThemeColors> {
+  const RemoteThemeColors({
+    required this.background,
+    required this.surface,
+    required this.accent,
+    required this.success,
+    required this.mutedText,
+  });
+
+  final Color background;
+  final Color surface;
+  final Color accent;
+  final Color success;
+  final Color mutedText;
+
+  @override
+  RemoteThemeColors copyWith({
+    Color? background,
+    Color? surface,
+    Color? accent,
+    Color? success,
+    Color? mutedText,
+  }) {
+    return RemoteThemeColors(
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      accent: accent ?? this.accent,
+      success: success ?? this.success,
+      mutedText: mutedText ?? this.mutedText,
+    );
+  }
+
+  @override
+  RemoteThemeColors lerp(RemoteThemeColors? other, double t) {
+    if (other == null) return this;
+    return RemoteThemeColors(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      mutedText: Color.lerp(mutedText, other.mutedText, t)!,
     );
   }
 }

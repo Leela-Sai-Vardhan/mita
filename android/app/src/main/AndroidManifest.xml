@@ -8,6 +8,10 @@
     <!-- Advertising ID (needed by google_mobile_ads) -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
     
+    <!-- Required for ads, backup/restore, and any network access in release builds -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    
     <application
         android:label="Mita"
         android:name="${applicationName}"

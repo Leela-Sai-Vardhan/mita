@@ -5,6 +5,9 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import '../data/models/task_model.dart';
+import '../screens/navigation_shell.dart';
+import 'telemetry_service.dart';
+import 'remote_config_service.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -17,6 +20,12 @@ class NotificationService {
   int _notificationTimeHour = 7;
   int _notificationTimeMinute = 0;
   bool _permissionGranted = false;
+  int? _pendingTabIndex;
+
+  static const String prefDaily = 'notif_daily';
+  static const String prefEndOfDay = 'notif_end_of_day';
+  static const String prefWeeklySummary = 'notif_weekly_summary';
+  static const String prefFocus = 'notif_focus';
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -75,7 +84,64 @@ class NotificationService {
   }
 
   void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('Notification tapped: ${response.payload}');
+    _recordTelemetryFromPayload(response.payload);
+    _routeFromPayload(response.payload);
+  }
+
+  void _recordTelemetryFromPayload(String? payload) {
+    if (payload == null) return;
+    final parts = payload.split('|');
+    if (parts.isEmpty || !parts.first.startsWith('tab:')) return;
+    if (parts.length < 2) {
+      final channel = switch (parts.first.substring(4)) {
+        'stats' => TelemetryService.notifWeekly,
+        _ => TelemetryService.notifDaily,
+      };
+      TelemetryService().recordNotificationFired(channel);
+      return;
+    }
+    switch (parts[1]) {
+      case 'daily':
+        TelemetryService().recordNotificationFired(TelemetryService.notifDaily);
+        break;
+      case 'weekly':
+        TelemetryService().recordNotificationFired(TelemetryService.notifWeekly);
+        break;
+      case 'end_of_day':
+        TelemetryService().recordNotificationFired(TelemetryService.notifEndOfDay);
+        break;
+      case 'focus':
+        TelemetryService().recordNotificationFired(TelemetryService.notifFocus);
+        break;
+    }
+  }
+
+  void _routeFromPayload(String? payload) {
+    if (payload == null) return;
+
+    int index = 0;
+    if (payload.startsWith('tab:')) {
+      final tabPart = payload.substring(4).split('|').first;
+      index = switch (tabPart) {
+        'history' => 1,
+        'stats' => 2,
+        'settings' => 3,
+        _ => 0,
+      };
+    }
+
+    final nav = MainNavigationState.navigatorKey.currentState;
+    if (nav != null && nav.mounted) {
+      nav.goToTab(index);
+    } else {
+      _pendingTabIndex = index;
+    }
+  }
+
+  int? get takePendingTab {
+    final pending = _pendingTabIndex;
+    _pendingTabIndex = null;
+    return pending;
   }
 
   Future<void> _loadNotificationTime() async {
@@ -85,6 +151,10 @@ class NotificationService {
   }
 
   Future<void> scheduleDailyReminder() async {
+    if (!await notificationEnabled(prefDaily)) {
+      await _notifications.cancel(1);
+      return;
+    }
     debugPrint('[NotificationService] Scheduling daily reminder for $_notificationTimeHour:$_notificationTimeMinute');
     
     await _notifications.cancel(1);
@@ -125,6 +195,7 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'tab:today|daily',
     );
       debugPrint('[NotificationService] Daily reminder scheduled successfully!');
     } catch (e) {
@@ -146,11 +217,72 @@ class NotificationService {
   int get notificationMinute => _notificationTimeMinute;
   bool get isPermissionGranted => _permissionGranted;
 
+  Future<void> requestPermission() async {
+    await _requestPermissions();
+  }
+
+  /// Maps a local notification pref key to its remote-config reminders key.
+  static String? _remoteKeyFor(String key) => switch (key) {
+        prefDaily => 'daily',
+        prefEndOfDay => 'end_of_day',
+        prefWeeklySummary => 'weekly',
+        prefFocus => 'focus',
+        _ => null,
+      };
+
+  /// Whether a reminder channel is allowed by BOTH the local pref and the
+  /// remote config. If remote config disables a reminder type, it is off for
+  /// everyone regardless of the on-device toggle.
+  Future<bool> notificationEnabled(String key) async {
+    final remoteKey = _remoteKeyFor(key);
+    if (remoteKey != null &&
+        !RemoteConfigService.instance.reminderEnabled(remoteKey)) {
+      return false;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(key) ?? true;
+  }
+
+  Future<void> setNotificationEnabled(String key, {required bool enabled}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, enabled);
+
+    if (!enabled) {
+      switch (key) {
+        case prefDaily:
+          await _notifications.cancel(1);
+          break;
+        case prefEndOfDay:
+          await _notifications.cancel(20);
+          break;
+        case prefWeeklySummary:
+          await _notifications.cancel(2);
+          break;
+        case prefFocus:
+          await _notifications.cancel(999);
+          break;
+      }
+      return;
+    }
+
+    switch (key) {
+      case prefDaily:
+        await scheduleDailyReminder();
+        break;
+      default:
+        break;
+    }
+  }
+
   Future<void> scheduleWeeklySummaryNotification({
     required int tasksCompleted,
     required int perfectDays,
     required int comparison,
   }) async {
+    if (!await notificationEnabled(prefWeeklySummary)) {
+      await _notifications.cancel(2);
+      return;
+    }
     await _notifications.cancel(2);
     
     final now = tz.TZDateTime.now(tz.local);
@@ -196,51 +328,21 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        payload: 'tab:stats|weekly',
       );
     } catch (e) {
       debugPrint('[NotificationService] ERROR scheduling weekly summary: $e');
     }
   }
 
-  Future<void> scheduleTaskReminder(Task task) async {
-    try {
-      if (task.isCompleted || task.deadline == null) return;
-
-      final deadline = task.deadline!;
-      final reminderTime = deadline.subtract(const Duration(hours: 1));
-      
-      if (reminderTime.isBefore(DateTime.now())) return;
-
-      final taskId = task.id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
-      
-      await _notifications.zonedSchedule(
-        100 + taskId,
-        'Task deadline approaching',
-        task.title,
-        tz.TZDateTime.from(reminderTime, tz.local),
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'task_reminders',
-            'Task Reminders',
-            channelDescription: 'Reminders for incomplete tasks',
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        payload: 'task_$taskId',
-      );
-    } catch (e) {
-      debugPrint('[NotificationService] Error scheduling task reminder: $e');
-    }
-  }
-
   Future<void> scheduleEndOfDayReminder(List<Task> tasks) async {
     try {
-      // ID 2 for end-of-day reminder
-      await _notifications.cancel(2);
+      if (!await notificationEnabled(prefEndOfDay)) {
+        await _notifications.cancel(20);
+        return;
+      }
+      // ID 20 for end-of-day reminder (id 2 is reserved for the weekly summary)
+      await _notifications.cancel(20);
 
       final incompleteTasks = tasks.where((t) => !t.isCompleted).toList();
       if (incompleteTasks.isEmpty) {
@@ -264,7 +366,7 @@ class NotificationService {
       }
 
       await _notifications.zonedSchedule(
-        2,
+        20,
         'End of day check-in',
         body,
         scheduledDate,
@@ -281,15 +383,12 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
+        payload: 'tab:today|end_of_day',
       );
       debugPrint('[NotificationService] Scheduled 10 PM reminder for ${incompleteTasks.length} incomplete tasks.');
     } catch (e) {
       debugPrint('[NotificationService] Error scheduling end of day reminder: $e');
     }
-  }
-
-  Future<void> cancelTaskReminder(int taskId) async {
-    await _notifications.cancel(100 + taskId);
   }
 
   Future<void> cancelAllNotifications() async {
@@ -320,6 +419,10 @@ class NotificationService {
 
   Future<void> scheduleFocusNotification(Duration duration, String taskTitle) async {
     try {
+      if (!await notificationEnabled(prefFocus)) {
+        await _notifications.cancel(999);
+        return;
+      }
       await _notifications.cancel(999); // ID 999 for focus timer
 
       final scheduledDate = tz.TZDateTime.now(tz.local).add(duration);
@@ -343,6 +446,7 @@ class NotificationService {
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        payload: 'tab:today|focus',
       );
       debugPrint('[NotificationService] Zoned Focus Notification scheduled for $scheduledDate');
     } catch (e) {

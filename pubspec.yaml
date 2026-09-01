@@ -1,7 +1,7 @@
 name: mita
 description: "Mita — Focus on what matters. Three tasks, one day."
 publish_to: 'none'
-version: 1.4.0+9
+version: 2.0.0+11
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -46,12 +46,15 @@ dependencies:
   audioplayers: ^6.1.0
   in_app_update: ^4.2.5
 
+  # Remote config (Vercel-hosted JSON)
+  http: ^1.2.0
+
   # Home Widget
   home_widget: ^0.7.0
   in_app_review: ^2.0.9
 
   # AdMob
-  google_mobile_ads: ^5.2.0
+  google_mobile_ads: ^9.0.0
 
   # Charts
   fl_chart: ^0.69.2

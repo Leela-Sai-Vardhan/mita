@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,8 +15,14 @@ import '../widgets/streak_indicator_widget.dart';
 import '../widgets/streak_dashboard.dart';
 import '../widgets/wisdom_banner.dart';
 import '../core/wisdom_messages.dart';
+import '../core/quick_picks.dart';
+import '../data/database_helper.dart';
+import '../widgets/goal_select_sheet.dart';
+import '../widgets/all_done_animation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'focus_screen.dart';
 import '../services/rate_prompt_service.dart';
+import '../widgets/upcoming_events_banner.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +32,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  List<String> _picks = const [];
+  bool _quickPicksHidden = false;
+  bool _goalPromptShown = false;
+
+  DateTime? _quickPicksDate;
+  List<String>? _cachedPastTitles;
+  bool _rewardedFlowActive = false;
 
   @override
   void initState() {
@@ -32,9 +46,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final provider = Provider.of<TaskProvider>(context, listen: false);
     provider.addListener(_onProviderChange);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingMilestone());
+    _loadQuickPicks();
+    _maybePromptGoals();
   }
 
-  @override
   @override
   void dispose() {
     Provider.of<TaskProvider>(context, listen: false).removeListener(_onProviderChange);
@@ -44,10 +59,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onProviderChange() {
     final provider = Provider.of<TaskProvider>(context, listen: false);
     if (provider.pendingMilestoneCelebration != null && mounted) {
-      final days = provider.pendingMilestoneCelebration!;
-      provider.clearMilestoneCelebration();
-      _showMilestoneCelebration(days);
+      // Defer until after the current build frame: this listener can fire
+      // synchronously while the tree is building, and calling showDialog /
+      // setState mid-build throws "setState() called during build".
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleMilestone(provider));
     }
+  }
+
+  void _handleMilestone(TaskProvider provider) {
+    if (!mounted) return;
+    final days = provider.pendingMilestoneCelebration;
+    if (days == null) return;
+    provider.clearMilestoneCelebration();
+    _showMilestoneCelebration(days);
   }
 
   void _checkPendingMilestone() {
@@ -59,7 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  @override
   @override
   Widget build(BuildContext context) {
     return Consumer<TaskProvider>(
@@ -77,15 +100,17 @@ class _HomeScreenState extends State<HomeScreen> {
           todayTotal: provider.todayTasks.length,
           isPerfectDay: provider.isPerfectDay,
         );
-        final showBanner = provider.streak > 0 || provider.todayTasks.isNotEmpty;
+        final daysToNext = StreakMilestones.getDaysToNextMilestone(provider.streak);
+        final showBanner = provider.isPerfectDay ||
+            (daysToNext != null && daysToNext > 0 && daysToNext <= 3);
         final accent = AppTheme.getStreakColor(provider.streak);
 
         return SafeArea(
           child: Column(
             children: [
               _buildTopBar(provider, dateStr, context),
-              _buildProgressIndicator(provider),
-              _buildDeadlineBar(provider),
+              _buildDayProgressCard(provider),
+              const UpcomingEventsBanner(),
               if (showBanner && wisdomParts != null)
                 WisdomBanner(
                   accent: accent,
@@ -137,118 +162,92 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProgressIndicator(TaskProvider provider) {
-    final progress = provider.todayTasks.isEmpty 
-        ? 0.0 
+  Widget _buildDayProgressCard(TaskProvider provider) {
+    final progress = provider.todayTasks.isEmpty
+        ? 0.0
         : provider.completedCount / provider.todayTasks.length;
 
+    final percent = provider.timeRemainingPercent;
+    final isWrappingUp = percent <= 0.25;
+    final hoursLeft = provider.secondsRemainingToday ~/ 3600;
+    final minutesLeft = (provider.secondsRemainingToday % 3600) ~/ 60;
+    final timeText = hoursLeft > 0
+        ? '${hoursLeft}h ${minutesLeft}m left'
+        : '${minutesLeft}m left';
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            provider.isPerfectDay
-                ? '${provider.completedCount} of 3 complete!'
-                : '${provider.completedCount} of ${provider.todayTasks.length} tasks done',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: provider.isPerfectDay ? AppTheme.success : AppTheme.mutedText,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.borderEmpty),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  provider.isPerfectDay
+                      ? '${provider.completedCount} of ${provider.todayTasks.length} complete!'
+                      : '${provider.completedCount} of ${provider.todayTasks.length} tasks done',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: provider.isPerfectDay ? AppTheme.success : AppTheme.mutedText,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.timer_outlined,
+                      size: 14,
+                      color: isWrappingUp ? Colors.orange : AppTheme.mutedText,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeText,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isWrappingUp ? Colors.orange : AppTheme.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppTheme.surface,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              provider.isPerfectDay ? AppTheme.success : AppTheme.accent,
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: AppTheme.background,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                provider.isPerfectDay ? AppTheme.success : AppTheme.accent,
+              ),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
             ),
-            minHeight: 4,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDeadlineBar(TaskProvider provider) {
-    return Consumer<TaskProvider>(
-      builder: (context, prov, child) {
-        final percent = prov.timeRemainingPercent;
-        final hoursLeft = prov.secondsRemainingToday ~/ 3600;
-        final minutesLeft = (prov.secondsRemainingToday % 3600) ~/ 60;
-        
-        String timeText;
-        if (hoursLeft > 0) {
-          timeText = '${hoursLeft}h ${minutesLeft}m left';
-        } else {
-          timeText = '${minutesLeft}m left';
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.timer_outlined,
-                  size: 16,
-                  color: percent > 0.25 ? AppTheme.mutedText : Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Today\'s deadline',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          color: AppTheme.mutedText,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: percent,
-                          backgroundColor: AppTheme.background,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            percent > 0.25 ? AppTheme.success : Colors.orange,
-                          ),
-                          minHeight: 3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  timeText,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: percent > 0.25 ? AppTheme.success : Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildTaskList(TaskProvider provider, BuildContext context) {
+    final visiblePicks =
+        _shouldShowQuickPicks(provider) ? _visiblePicks(provider) : const <String>[];
+    final picksWidget =
+        visiblePicks.isNotEmpty ? _buildQuickPicks(provider, visiblePicks) : null;
+
     if (provider.todayTasks.isEmpty) {
       return ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         children: [
+          if (picksWidget != null) picksWidget,
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -294,17 +293,198 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       );
     }
+    final baseCount = provider.todayTasks.length + (provider.canAddTask ? 1 : 0);
+    final itemCount = baseCount + (picksWidget != null ? 1 : 0);
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      itemCount: provider.todayTasks.length + (provider.canAddTask ? 1 : 0),
+      itemCount: itemCount,
       itemBuilder: (context, index) {
-        if (index < provider.todayTasks.length) {
-          return _buildTaskCard(provider.todayTasks[index], provider).animate().fadeIn().slideX();
+        if (picksWidget != null && index == 0) return picksWidget;
+        final taskIndex = picksWidget != null ? index - 1 : index;
+        if (taskIndex < provider.todayTasks.length) {
+          return _buildTaskCard(provider.todayTasks[taskIndex], provider).animate().fadeIn().slideX();
         } else {
-          return _buildEmptySlot(index, context, provider);
+          return _buildEmptySlot(taskIndex, context, provider);
         }
       },
     );
+  }
+
+  Future<void> _maybePromptGoals() async {
+    if (_goalPromptShown) return;
+    _goalPromptShown = true;
+    try {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!await QuickPicks.isGoalSelectionDone()) {
+        if (!mounted || !context.mounted) return;
+        final result = await GoalSelectSheet.show(context);
+        if (result != null) {
+          await QuickPicks.saveGoals(result);
+        }
+        await QuickPicks.markGoalSelectionDone();
+        if (mounted) _loadQuickPicks(forceRefresh: true);
+      }
+    } catch (e) {
+      debugPrint('[Home] Goal prompt failed: $e');
+    }
+  }
+
+  Future<void> _loadQuickPicks({bool forceRefresh = false}) async {
+    final provider = Provider.of<TaskProvider>(context, listen: false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final todayKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      if (prefs.getString('quick_picks_hidden') == todayKey) return;
+
+      final goalKeys = await QuickPicks.getGoalKeys();
+
+      final now = DateTime.now();
+      final todayDate = DateTime(now.year, now.month, now.day);
+
+      if (forceRefresh ||
+          _cachedPastTitles == null ||
+          _quickPicksDate != todayDate) {
+        final allTasks = await DatabaseHelper.instance.getAllTasks();
+        _cachedPastTitles =
+            allTasks.where((t) => t.isCompleted).map((t) => t.title).toList();
+        _quickPicksDate = todayDate;
+      }
+
+      final picks = QuickPicks.suggest(
+        todayTitles: provider.todayTasks.map((t) => t.title).toList(),
+        pastTitles: _cachedPastTitles!,
+        goalKeys: goalKeys,
+      );
+      if (mounted && picks.isNotEmpty) {
+        setState(() => _picks = picks);
+      }
+    } catch (e) {
+      debugPrint('[Home] Load quick picks failed: $e');
+    }
+  }
+
+  bool _shouldShowQuickPicks(TaskProvider provider) {
+    if (_quickPicksHidden) return false;
+    if (provider.todayTasks.length >= 3) return false;
+    return _picks.isNotEmpty;
+  }
+
+  List<String> _visiblePicks(TaskProvider provider) {
+    final today = provider.todayTasks
+        .map((t) => t.title.trim().toLowerCase())
+        .toSet();
+    return _picks
+        .where((p) => !today.contains(p.trim().toLowerCase()))
+        .toList();
+  }
+
+  Widget _buildQuickPicks(TaskProvider provider, List<String> picks) {
+    final isAtRisk = provider.isStreakFrozen && provider.todayTasks.isEmpty;
+    final accent = isAtRisk ? AppTheme.streakFreeze : AppTheme.accent;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isAtRisk ? accent.withValues(alpha: 0.4) : AppTheme.borderEmpty,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isAtRisk ? Icons.warning_amber_rounded : Icons.auto_awesome,
+                size: 16,
+                color: accent,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isAtRisk
+                      ? 'Save your streak — quick pick'
+                      : 'Quick picks · ${QuickPicks.timeBucketLabel()}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: accent,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: _dismissQuickPicks,
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 18, color: AppTheme.mutedText),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final title in picks)
+                GestureDetector(
+                  onTap: () => _addQuickPick(provider, title),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isAtRisk && title == picks.first
+                          ? accent.withValues(alpha: 0.15)
+                          : AppTheme.background,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isAtRisk && title == picks.first
+                            ? accent.withValues(alpha: 0.6)
+                            : AppTheme.borderEmpty,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add, size: 14, color: AppTheme.accent),
+                        const SizedBox(width: 4),
+                        Text(
+                          title,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addQuickPick(TaskProvider provider, String title) async {
+    HapticFeedback.selectionClick();
+    await provider.addTask(title);
+    if (!mounted) return;
+    setState(() => _picks = _picks.where((p) => p != title).toList());
+  }
+
+  Future<void> _dismissQuickPicks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    await prefs.setString('quick_picks_hidden', todayKey);
+    if (!mounted) return;
+    setState(() {
+      _quickPicksHidden = true;
+      _picks = const [];
+    });
   }
 
   Widget _buildTaskCard(Task task, TaskProvider provider) {
@@ -314,22 +494,9 @@ class _HomeScreenState extends State<HomeScreen> {
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           if (task.isCompleted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              AppTheme.customSnackBar(
-                message: 'Completed tasks cannot be unmarked from Today. Please go to History.',
-                context: context,
-                icon: Icons.info_outline,
-                leftBarColor: Colors.orangeAccent,
-              ),
-            );
-            return false;
-          }
-          final confirm = await _showCompleteConfirmationDialog(context, task);
-          if (confirm == true) {
-            await provider.toggleTask(task);
-            if (context.mounted) {
-              await RatePromptService().tryShowIfNeeded(context);
-            }
+            _showUnmarkHint(context);
+          } else {
+            await _completeTaskWithUndo(context, provider, task);
           }
           return false;
         }
@@ -439,44 +606,48 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () async {
+                    onTap: () {
                       if (task.isCompleted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          AppTheme.customSnackBar(
-                            message: 'Completed tasks cannot be unmarked from Today. Please go to History.',
-                            context: context,
-                            icon: Icons.info_outline,
-                            leftBarColor: Colors.orangeAccent,
-                          ),
-                        );
+                        _showUnmarkHint(context);
                       } else {
-                        final confirm = await _showCompleteConfirmationDialog(context, task);
-                        if (confirm == true) {
-                          await provider.toggleTask(task);
-                          if (context.mounted) {
-                            await RatePromptService().tryShowIfNeeded(context);
-                          }
-                        }
+                        _completeTaskWithUndo(context, provider, task);
                       }
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: task.isCompleted ? AppTheme.success : Colors.transparent,
-                          border: Border.all(
-                            color: task.isCompleted
-                                ? AppTheme.success
-                                : (task.isExtended ? Colors.orange : AppTheme.mutedText),
-                            width: 1.5,
+                      child: AnimatedScale(
+                        scale: task.isCompleted ? 1.0 : 0.92,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutBack,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: task.isCompleted ? AppTheme.success : Colors.transparent,
+                            border: Border.all(
+                              color: task.isCompleted
+                                  ? AppTheme.success
+                                  : (task.isExtended ? Colors.orange : AppTheme.mutedText),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween<double>(end: task.isCompleted ? 1.0 : 0.0),
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOutBack,
+                            builder: (context, value, child) {
+                              // easeOutBack overshoots beyond [0,1]; clamp so
+                              // Opacity's assertion (0..1) is never violated.
+                              final a = value.clamp(0.0, 1.0);
+                              return Opacity(
+                                opacity: a,
+                                child: Transform.scale(scale: value, child: child),
+                              );
+                            },
+                            child: const Icon(Icons.check, size: 16, color: Colors.white),
                           ),
                         ),
-                        child: task.isCompleted
-                            ? const Icon(Icons.check, size: 16, color: Colors.white)
-                            : null,
                       ),
                     ),
                   ),
@@ -737,115 +908,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAddButton(TaskProvider provider, BuildContext context) {
     List<Widget> children = [];
 
-    if (provider.isFullPerfectDay && provider.todayTasks.length <= 3) {
+    if (provider.isFullPerfectDay) {
       final milestone = StreakMilestones.getMilestoneForDays(provider.streak);
       final isMilestone = provider.streak >= 3 && StreakMilestones.isMilestoneDay(provider.streak);
       children.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isMilestone
-                    ? [
-                        AppTheme.getStreakColor(provider.streak).withValues(alpha: 0.15),
-                        AppTheme.surface,
-                      ]
-                    : [
-                        AppTheme.success.withValues(alpha: 0.15),
-                        AppTheme.surface,
-                      ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isMilestone
-                    ? AppTheme.getStreakColor(provider.streak).withValues(alpha: 0.3)
-                    : AppTheme.success.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isMilestone
-                          ? AppTheme.getStreakColor(provider.streak)
-                          : AppTheme.success)
-                      .withValues(alpha: 0.15),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: (isMilestone
-                            ? AppTheme.getStreakColor(provider.streak)
-                            : AppTheme.success)
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: (isMilestone
-                              ? AppTheme.getStreakColor(provider.streak)
-                              : AppTheme.success)
-                          .withValues(alpha: 0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      isMilestone ? (milestone?.emoji ?? '🎉') : '🎉',
-                      style: const TextStyle(fontSize: 28),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isMilestone
-                            ? 'Milestone Achieved!'
-                            : 'All done — great day!',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isMilestone && milestone != null
-                            ? '"${milestone.title}" — ${provider.streak} days!'
-                            : 'Streak: ${provider.streak} days',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          color: AppTheme.mutedText,
-                        ),
-                      ),
-                      if (isMilestone && milestone != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          milestone.message,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 12,
-                            color: AppTheme.getStreakColor(provider.streak).withValues(alpha: 0.8),
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          child: AllDoneAnimation(
+            streak: provider.streak,
+            isMilestone: isMilestone,
+            milestoneEmoji: milestone?.emoji,
+            milestoneTitle: milestone?.title,
+            milestoneMessage: milestone?.message,
           ).animate().scale(delay: 200.ms, duration: 400.ms, curve: Curves.easeOutBack),
         ),
       );
@@ -1043,6 +1117,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showRewardedAdForExtension(BuildContext context, TaskProvider provider) {
+    if (_rewardedFlowActive) return;
     if (!AdService().isRewardedReady) {
       ScaffoldMessenger.of(context).showSnackBar(
         AppTheme.customSnackBar(
@@ -1054,6 +1129,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
+    _rewardedFlowActive = true;
 
     showDialog(
       context: context,
@@ -1073,24 +1149,25 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    AdService().showRewardedAd(
-      onEarned: (amount) {
-        if (context.mounted) Navigator.pop(context);
+    AdService().showRewardedAd().then((earned) async {
+      if (_rewardedFlowActive && context.mounted) Navigator.pop(context);
+      _rewardedFlowActive = false;
+      if (!context.mounted) return;
+
+      if (earned) {
         provider.grantExtensionSlot();
         _showAddTaskDialog(context, provider);
-      },
-      onAdFailed: () {
-        if (context.mounted) Navigator.pop(context);
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           AppTheme.customSnackBar(
-            message: 'Ad failed to load. Please try again.',
+            message: 'Ad closed before completing. Extra task not granted.',
             context: context,
-            icon: Icons.error_outline,
-            leftBarColor: Colors.redAccent,
+            icon: Icons.info_outline,
+            leftBarColor: Colors.orangeAccent,
           ),
         );
-      },
-    );
+      }
+    });
   }
 
   static const _counterStyle = TextStyle(fontSize: 12, color: AppTheme.mutedText);
@@ -1408,14 +1485,46 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${diff.inMinutes}m left';
   }
 
-  Future<bool?> _showCompleteConfirmationDialog(BuildContext context, Task task) {
-    return AppTheme.showPremiumConfirmDialog(
-      context: context,
-      title: 'Mark as Complete?',
-      content: 'This task will be marked as completed. You cannot undo this action directly from Today.\n\nTo unmark this task later, you will need to watch a rewarded ad on the History screen.',
-      confirmLabel: 'Confirm',
-      headerIcon: Icons.check_circle_outline,
-      accentColor: AppTheme.success,
+  Future<void> _completeTaskWithUndo(BuildContext context, TaskProvider provider, Task task) async {
+    if (task.isCompleted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+
+    await provider.toggleTask(task);
+    if (!mounted || !context.mounted) return;
+    HapticFeedback.mediumImpact();
+
+    messenger.showSnackBar(
+      AppTheme.customSnackBar(
+        context: context,
+        message: 'Task complete ✓',
+        icon: Icons.check_circle,
+        leftBarColor: AppTheme.success,
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'UNDO',
+          textColor: AppTheme.accent,
+          onPressed: () {
+            messenger.clearSnackBars();
+            provider.toggleTask(task);
+          },
+        ),
+      ),
+    );
+
+    if (context.mounted) {
+      await RatePromptService().tryShowIfNeeded(context);
+    }
+  }
+
+  void _showUnmarkHint(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      AppTheme.customSnackBar(
+        message: 'To unmark a completed task, go to History.',
+        context: context,
+        icon: Icons.history,
+        leftBarColor: Colors.orangeAccent,
+      ),
     );
   }
 }

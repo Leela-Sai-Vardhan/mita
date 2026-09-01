@@ -39,6 +39,16 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Signing credentials - never commit these
+*.jks
+*.keystore
+android/local.properties
+local.properties
+
+# graphify knowledge-graph artifacts (regenerated on every run)
+graphify-out/
+lib/graphify-out/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

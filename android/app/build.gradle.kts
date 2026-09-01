@@ -1,9 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Load signing credentials from local.properties (gitignored). These are never
+// committed to version control to protect the release signing identity.
+val localProps = Properties().apply {
+    val f = file("../local.properties")
+    if (f.exists()) {
+        f.inputStream().use { load(it) }
+    }
+}
+val keystoreFile = localProps.getProperty("signing.keystore")?.let { file(it) }
+    ?: file("mita-release.jks")
+val keystorePassword = localProps.getProperty("signing.storePassword") ?: ""
+val keystoreAlias = localProps.getProperty("signing.keyAlias") ?: ""
+val keystoreKeyPassword = localProps.getProperty("signing.keyPassword") ?: ""
 
 android {
     namespace = "com.dreamstarx.mita"
@@ -30,10 +46,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("mita-release.jks")
-            storePassword = "mita1234"
-            keyAlias = "mita"
-            keyPassword = "mita1234"
+            storeFile = keystoreFile
+            storePassword = keystorePassword
+            keyAlias = keystoreAlias
+            keyPassword = keystoreKeyPassword
         }
     }
 

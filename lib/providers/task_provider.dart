@@ -9,6 +9,7 @@ import '../data/models/task_model.dart';
 import '../services/notification_service.dart';
 import '../services/json_storage_service.dart';
 import '../services/rate_prompt_service.dart';
+import '../services/telemetry_service.dart';
 import '../core/streak_milestones.dart';
 
 class TaskProvider with ChangeNotifier {
@@ -110,7 +111,6 @@ class TaskProvider with ChangeNotifier {
       // Load streak — non-critical, isolated
       try {
         await _loadStreak();
-        await _checkStreakFreeze();
       } catch (e) {
         debugPrint('[TaskProvider] ⚠️ Streak load failed (non-fatal): $e');
       }
@@ -139,6 +139,17 @@ class TaskProvider with ChangeNotifier {
         await _scheduleWeeklyNotification();
       } catch (e) {
         debugPrint('[TaskProvider] ⚠️ Weekly notification failed (non-fatal): $e');
+      }
+
+      // Reload today's tasks to ensure current date (handles date change while app running)
+      await _loadTasks();
+      debugPrint('[TaskProvider] ✅ Today tasks reloaded for freeze check: ${_todayTasks.length}');
+
+      // Check streak freeze LAST, after all data is loaded and date is verified
+      try {
+        await _checkStreakFreeze();
+      } catch (e) {
+        debugPrint('[TaskProvider] ⚠️ Streak freeze check failed (non-fatal): $e');
       }
     } catch (e, stackTrace) {
       debugPrint('[TaskProvider] ❌ CRITICAL error in loadData: $e\n$stackTrace');
@@ -194,34 +205,70 @@ class TaskProvider with ChangeNotifier {
     return weekOfYear;
   }
 
-  Future<void> _saveStreakPrefs([SharedPreferences? prefs]) async {
-    final p = prefs ?? await SharedPreferences.getInstance();
-    await p.setInt('streak', _streak);
-    await p.setInt('bestStreak', _bestStreak);
-    if (_lastPerfectDay != null) {
-      await p.setString('lastPerfectDay', _getDateKey(_lastPerfectDay!));
-    } else {
-      await p.remove('lastPerfectDay');
-    }
-    await p.setBool('isStreakFrozen', _isStreakFrozen);
-    if (_streakFrozenWeek != null) {
-      await p.setInt('streakFrozenWeek', _streakFrozenWeek!);
-    } else {
-      await p.remove('streakFrozenWeek');
-    }
+  Future<void> _writeStreakState(SharedPreferences p) async {
+    final state = {
+      'streak': _streak,
+      'bestStreak': _bestStreak,
+      'lastPerfectDay': _lastPerfectDay != null ? _getDateKey(_lastPerfectDay!) : null,
+      'isStreakFrozen': _isStreakFrozen,
+      'streakFrozenWeek': _streakFrozenWeek,
+      'earnedMilestones': _earnedMilestones.toList(),
+      'streakHistory': _streakHistory,
+    };
+    await p.setString('streak_state', jsonEncode(state));
   }
 
-  Future<void> _loadTasks() async {
-    final now = DateTime.now();
-    _todayTasks = await DatabaseHelper.instance.getTasksForDate(now);
-  }
-
-  Future<void> _loadAllTasks() async {
-    _allTasks = await DatabaseHelper.instance.getAllTasks();
-  }
-
-  Future<void> _loadStreak() async {
+  Future<void> _loadStreakState() async {
     final prefs = await SharedPreferences.getInstance();
+    final stateJson = prefs.getString('streak_state');
+    
+    if (stateJson != null) {
+      try {
+        final state = jsonDecode(stateJson) as Map<String, dynamic>;
+        _streak = state['streak'] as int? ?? 0;
+        _bestStreak = state['bestStreak'] as int? ?? 0;
+        final lastPerfectDayStr = state['lastPerfectDay'] as String?;
+        if (lastPerfectDayStr != null) {
+          _lastPerfectDay = DateTime.tryParse(lastPerfectDayStr);
+        }
+        _isStreakFrozen = state['isStreakFrozen'] as bool? ?? false;
+        _streakFrozenWeek = state['streakFrozenWeek'] as int?;
+        if (_streakFrozenWeek == 0) _streakFrozenWeek = null;
+        final milestones = state['earnedMilestones'] as List?;
+        if (milestones != null) {
+          _earnedMilestones = milestones.map((e) => e as int).toSet();
+        }
+        final history = state['streakHistory'] as List?;
+        if (history != null) {
+          _streakHistory = history.cast<String>();
+        }
+
+        // Self-heal: if the atomic blob lost today's perfect day but the
+        // legacy keys still prove it (older builds clobbered the blob),
+        // restore the earned streak so a completed day is never lost.
+        final legacyStreak = prefs.getInt('streak') ?? 0;
+        final legacyLastPerfectDay = prefs.getString('lastPerfectDay');
+        final todayKey = _getTodayKey();
+        if (lastPerfectDayStr == null &&
+            legacyLastPerfectDay != null &&
+            legacyLastPerfectDay == todayKey &&
+            legacyStreak > _streak) {
+          _streak = legacyStreak;
+          _lastPerfectDay = DateTime.tryParse(legacyLastPerfectDay);
+          if (_bestStreak < _streak) _bestStreak = _streak;
+          if (!_streakHistory.contains(todayKey)) {
+            _streakHistory.add(todayKey);
+          }
+          await _writeStreakState(prefs);
+          debugPrint('[TaskProvider] 🔄 Streak self-healed from legacy keys: $_streak');
+        }
+        return;
+      } catch (e) {
+        debugPrint('[TaskProvider] Failed to parse streak_state, falling back: $e');
+      }
+    }
+
+    // Fallback to individual keys for backward compatibility
     _streak = prefs.getInt('streak') ?? 0;
     _bestStreak = prefs.getInt('bestStreak') ?? 0;
     final lastPerfectDayStr = prefs.getString('lastPerfectDay');
@@ -242,6 +289,19 @@ class TaskProvider with ChangeNotifier {
     if (historyJson != null) {
       _streakHistory = (jsonDecode(historyJson) as List).cast<String>();
     }
+  }
+
+  Future<void> _loadTasks() async {
+    final now = DateTime.now();
+    _todayTasks = await DatabaseHelper.instance.getTasksForDate(now);
+  }
+
+  Future<void> _loadAllTasks() async {
+    _allTasks = await DatabaseHelper.instance.getAllTasks();
+  }
+
+  Future<void> _loadStreak() async {
+    await _loadStreakState();
   }
 
   Future<void> _updateEndOfDayReminder() async {
@@ -281,12 +341,6 @@ class TaskProvider with ChangeNotifier {
     _allTasks.add(savedTask);
 
     try {
-      await NotificationService().scheduleTaskReminder(savedTask);
-    } catch (e) {
-      debugPrint('[TaskProvider] ⚠️ Task reminder scheduling failed (non-fatal): $e');
-    }
-
-    try {
       await _updateEndOfDayReminder();
     } catch (e) {
       debugPrint('[TaskProvider] ⚠️ End-of-day reminder update failed (non-fatal): $e');
@@ -312,6 +366,16 @@ class TaskProvider with ChangeNotifier {
     if (isPerfectDay) return;
 
     final String todayStr = _getTodayKey();
+    
+    // Explicit date-change detection: if lastPerfectDay is today, no freeze needed
+    if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) return;
+
+    // Date has changed since last perfect day - check if today qualifies as perfect day
+    // Reload tasks to ensure we have current date's tasks (handles app running overnight)
+    await _loadTasks();
+    
+    // Re-check after reload
+    if (isPerfectDay) return;
     if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) return;
 
     final now = DateTime.now();
@@ -322,30 +386,41 @@ class TaskProvider with ChangeNotifier {
       _lastPerfectDay = null;
       _isStreakFrozen = false;
       _streakFrozenWeek = null;
-      await _saveStreakPrefs();
+      await _writeStreakState(await SharedPreferences.getInstance());
       debugPrint('[TaskProvider] 🔴 Streak reset: second freeze this week');
     } else {
       _streakFrozenWeek = currentWeek;
       _isStreakFrozen = true;
-      await _saveStreakPrefs();
+      await _writeStreakState(await SharedPreferences.getInstance());
       debugPrint('[TaskProvider] ⏳ Streak frozen: first miss this week');
     }
   }
 
   Future<void> toggleTask(Task task) async {
     final now = DateTime.now();
-    final updatedTask = task.copyWith(
-      isCompleted: !task.isCompleted,
-      completedAt: !task.isCompleted ? now : null,
+
+    // Re-read the task's true current state so toggling is idempotent even if
+    // the caller passes a stale reference (e.g. the UNDO snackbar closure,
+    // which captured the task before it was completed).
+    Task current = task;
+    final taskId = task.id;
+    if (taskId != null) {
+      final fresh = await DatabaseHelper.instance.getTaskSafe(taskId);
+      if (fresh != null) current = fresh;
+    }
+
+    final updatedTask = current.copyWith(
+      isCompleted: !current.isCompleted,
+      completedAt: !current.isCompleted ? now : null,
     );
     await DatabaseHelper.instance.updateTask(updatedTask);
 
-    final allIndex = _allTasks.indexWhere((t) => t.id == task.id);
+    final allIndex = _allTasks.indexWhere((t) => t.id == current.id);
     if (allIndex != -1) {
       _allTasks[allIndex] = updatedTask;
     }
 
-    final index = _todayTasks.indexWhere((t) => t.id == task.id);
+    final index = _todayTasks.indexWhere((t) => t.id == current.id);
     if (index != -1) {
       _todayTasks[index] = updatedTask;
       
@@ -355,8 +430,8 @@ class TaskProvider with ChangeNotifier {
         await _checkRevertStreak();
       }
 
-      if (updatedTask.isCompleted && task.recurrence != TaskRecurrence.none) {
-        await _handleRecurrence(task);
+      if (updatedTask.isCompleted && current.recurrence != TaskRecurrence.none) {
+        await _handleRecurrence(current);
       }
       
       try {
@@ -377,6 +452,11 @@ class TaskProvider with ChangeNotifier {
     if (updatedTask.isCompleted) {
       _requestInAppReview();
       RatePromptService().incrementTasksCompleted();
+      try {
+        await TelemetryService().recordTaskCompleted();
+      } catch (e) {
+        debugPrint('[TaskProvider] Telemetry error: $e');
+      }
     }
   }
 
@@ -403,11 +483,9 @@ class TaskProvider with ChangeNotifier {
     final tomorrow = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
     final taskDate = DateTime(task.date.year, task.date.month, task.date.day);
     
-    final existingForTomorrow = _allTasks.any((t) => 
+    final tomorrowTasks = await DatabaseHelper.instance.getTasksForDate(tomorrow);
+    final existingForTomorrow = tomorrowTasks.any((t) => 
       t.title == task.title && 
-      t.date.year == tomorrow.year && 
-      t.date.month == tomorrow.month && 
-      t.date.day == tomorrow.day &&
       t.date.isAfter(taskDate)
     );
     
@@ -488,13 +566,12 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> _checkRevertStreak() async {
     final prefs = await SharedPreferences.getInstance();
-    final lastPerfectDayStr = prefs.getString('lastPerfectDay');
     final String todayStr = _getTodayKey();
 
-    if (lastPerfectDayStr == todayStr) {
+    if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) {
       if (_streak > 0) _streak--;
       _lastPerfectDay = null;
-      await _saveStreakPrefs(prefs);
+      await _writeStreakState(prefs);
     }
   }
 
@@ -506,37 +583,39 @@ class TaskProvider with ChangeNotifier {
 
     if (lastPerfectDayStr != todayStr) {
       _streak++;
-      await prefs.setInt('streak', _streak);
+
+      try {
+        await TelemetryService().recordPerfectDay();
+      } catch (e) {
+        debugPrint('[TaskProvider] Telemetry error: $e');
+      }
 
       if (_streak > _bestStreak) {
         _bestStreak = _streak;
-        await prefs.setInt('bestStreak', _bestStreak);
       }
 
       _lastPerfectDay = now;
-      await prefs.setString('lastPerfectDay', todayStr);
 
       // Unfreeze if frozen
       if (_isStreakFrozen) {
         _isStreakFrozen = false;
         _streakFrozenWeek = null;
-        await prefs.remove('streakFrozenWeek');
-        await prefs.setBool('isStreakFrozen', false);
       }
 
       // Track streak history
       if (!_streakHistory.contains(todayStr)) {
         _streakHistory.add(todayStr);
         if (_streakHistory.length > 365) _streakHistory.removeAt(0);
-        await prefs.setString('streakHistory', jsonEncode(_streakHistory));
       }
 
       // Check milestone
       if (StreakMilestones.isMilestoneDay(_streak) && !_earnedMilestones.contains(_streak)) {
         _earnedMilestones.add(_streak);
-        await prefs.setString('earnedMilestones', jsonEncode(_earnedMilestones.toList()));
         _pendingMilestoneCelebration = _streak;
       }
+
+      // Atomic write of all streak state
+      await _writeStreakState(prefs);
     }
   }
 
@@ -578,11 +657,7 @@ class TaskProvider with ChangeNotifier {
     _isStreakFrozen = false;
     _streakFrozenWeek = null;
     _pendingMilestoneCelebration = null;
-    await prefs.setInt('streak', 0);
-    await prefs.setInt('bestStreak', 0);
-    await prefs.remove('lastPerfectDay');
-    await prefs.setBool('isStreakFrozen', false);
-    await prefs.remove('streakFrozenWeek');
+    await _writeStreakState(prefs);
     notifyListeners();
     await JsonStorageService().saveToJson();
   }

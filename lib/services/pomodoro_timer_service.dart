@@ -16,6 +16,8 @@ class PomodoroTimerService {
 
   PomodoroTimerService();
 
+  final Stopwatch _stopwatch = Stopwatch();
+
   Stream<TimerState> get stateStream => _stateController.stream;
   Stream<int> get tickStream => _tickController.stream;
   TimerState get state => _state;
@@ -34,7 +36,7 @@ class PomodoroTimerService {
     if (_state == TimerState.idle) return null;
     return FocusSession(
       taskId: _taskId,
-      startedAt: DateTime.now().subtract(Duration(seconds: _elapsed)),
+      startedAt: _startedAt ?? DateTime.now().subtract(Duration(seconds: _elapsed)),
       durationSec: _duration,
       elapsedSec: _elapsed,
       completed: _state == TimerState.completed || _state == TimerState.breakMode,
@@ -42,12 +44,8 @@ class PomodoroTimerService {
   }
 
   void _onTick() {
-    final now = DateTime.now();
-    final wallElapsed = _startedAt != null ? now.difference(_startedAt!).inSeconds : 0;
-    if (wallElapsed > _elapsed) {
-      _elapsed = wallElapsed;
-      _tickController.add(_elapsed);
-    }
+    _elapsed = _stopwatch.elapsed.inSeconds;
+    _tickController.add(_elapsed);
 
     if (_elapsed >= _duration) {
       _timer?.cancel();
@@ -70,6 +68,7 @@ class PomodoroTimerService {
     _duration = durationSec;
     _elapsed = 0;
     _startedAt = DateTime.now();
+    _stopwatch..reset()..start();
     _state = TimerState.running;
     _stateController.add(_state);
 
@@ -80,15 +79,17 @@ class PomodoroTimerService {
     if (_state != TimerState.running) return;
     _timer?.cancel();
     _timer = null;
+    _stopwatch.stop();
     _state = TimerState.paused;
     _stateController.add(_state);
   }
 
   void resume() {
     if (_state != TimerState.paused) return;
-    _startedAt = DateTime.now().subtract(Duration(seconds: _elapsed));
     _state = TimerState.running;
     _stateController.add(_state);
+    _startedAt = DateTime.now().subtract(Duration(seconds: _elapsed));
+    _stopwatch.start();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
   }
@@ -102,6 +103,7 @@ class PomodoroTimerService {
     _duration = 1500;
     _taskId = 0;
     _startedAt = null;
+    _stopwatch..stop()..reset();
   }
 
   void skipBreak() {
@@ -112,6 +114,7 @@ class PomodoroTimerService {
     _duration = 1500;
     _taskId = 0;
     _startedAt = null;
+    _stopwatch..stop()..reset();
     _stateController.add(_state);
     _tickController.add(0);
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../providers/task_provider.dart';
 import '../providers/pomodoro_provider.dart';
@@ -11,6 +12,10 @@ import '../services/notification_service.dart';
 import '../services/backup_service.dart';
 import '../services/json_storage_service.dart';
 import '../services/rate_prompt_service.dart';
+import '../services/remote_config_service.dart';
+import '../services/app_update_service.dart';
+import '../core/quick_picks.dart';
+import '../widgets/goal_select_sheet.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -45,6 +50,33 @@ class SettingsScreen extends StatelessWidget {
                     title: 'Daily Reminder',
                     subtitle: 'Set a time for daily task reminders',
                     onTap: () => _showNotificationTimeDialog(context),
+                  ),
+                  const _NotificationToggleTile(
+                    icon: Icons.alarm,
+                    title: 'Daily Reminder',
+                    subtitle: 'Morning nudge at your chosen time',
+                    prefKey: NotificationService.prefDaily,
+                  ),
+                  const _NotificationToggleTile(
+                    icon: Icons.nightlight_outlined,
+                    title: 'End-of-Day Check-in',
+                    subtitle: 'Gentle evening nudge if tasks remain (10 PM)',
+                    prefKey: NotificationService.prefEndOfDay,
+                    iconColor: Colors.orangeAccent,
+                  ),
+                  const _NotificationToggleTile(
+                    icon: Icons.summarize_outlined,
+                    title: 'Weekly Summary',
+                    subtitle: 'Monday progress recap',
+                    prefKey: NotificationService.prefWeeklySummary,
+                    iconColor: Colors.amber,
+                  ),
+                  const _NotificationToggleTile(
+                    icon: Icons.radio_button_checked,
+                    title: 'Focus Complete',
+                    subtitle: 'When your focus session ends',
+                    prefKey: NotificationService.prefFocus,
+                    iconColor: Colors.blueAccent,
                   ),
                   _SettingsTile(
                     icon: Icons.battery_charging_full,
@@ -87,6 +119,16 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () => _importData(context),
                   ),
                   const SizedBox(height: 24),
+                  _buildSectionTitle('PERSONALIZE'),
+                  const SizedBox(height: 8),
+                  _SettingsTile(
+                    icon: Icons.track_changes,
+                    title: 'Your Goals',
+                    subtitle: 'Pick up to 3 focus areas for smarter task suggestions',
+                    iconColor: AppTheme.accent,
+                    onTap: () => _showGoalSelectSheet(context),
+                  ),
+                  const SizedBox(height: 24),
                   _buildSectionTitle('DATA'),
                   const SizedBox(height: 8),
                   _SettingsTile(
@@ -125,7 +167,7 @@ class SettingsScreen extends StatelessWidget {
                   _SettingsTile(
                     icon: Icons.info_outline,
                     title: 'About',
-                    subtitle: 'v1.4.0+9',
+                    subtitle: AppTheme.appVersion,
                     onTap: () => _showAboutDialog(context),
                   ),
                   _SettingsTile(
@@ -141,6 +183,16 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: 'Coming soon',
                     locked: true,
                     onTap: () {},
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSectionTitle('UPDATES'),
+                  const SizedBox(height: 8),
+                  _SettingsTile(
+                    icon: Icons.sync,
+                    title: 'Check for Updates',
+                    subtitle: 'Refresh remote config & re-theme',
+                    iconColor: AppTheme.accent,
+                    onTap: () => _checkForUpdates(context),
                   ),
                   const SizedBox(height: 32),
                 ],
@@ -252,6 +304,15 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showGoalSelectSheet(BuildContext context) async {
+    final current = await QuickPicks.getGoalKeys();
+    if (!context.mounted) return;
+    final result = await GoalSelectSheet.show(context, initial: current);
+    if (result != null && context.mounted) {
+      await QuickPicks.saveGoals(result);
+    }
   }
 
   void _showResetStreakDialog(BuildContext context) {
@@ -620,12 +681,22 @@ class SettingsScreen extends StatelessWidget {
               style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 14),
             ),
             const SizedBox(height: 12),
-            Text(
-              'Full policy: https://sai-vardhan-portfolio.vercel.app/mita-privacy.html',
-              style: GoogleFonts.dmSans(
-                color: AppTheme.accent,
-                fontSize: 14,
-                decoration: TextDecoration.underline,
+            GestureDetector(
+              onTap: () async {
+                final uri = Uri.parse(
+                  'https://sai-vardhan-portfolio.vercel.app/mita-privacy.html',
+                );
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Text(
+                'Full policy: https://sai-vardhan-portfolio.vercel.app/mita-privacy.html',
+                style: GoogleFonts.dmSans(
+                  color: AppTheme.accent,
+                  fontSize: 14,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
           ],
@@ -678,7 +749,7 @@ class SettingsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'v1.4.0+9',
+              AppTheme.appVersion,
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -703,6 +774,50 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _checkForUpdates(BuildContext context) {
+    final rc = RemoteConfigService.instance;
+    final messenger = ScaffoldMessenger.of(context);
+
+    messenger.showSnackBar(
+      AppTheme.customSnackBar(
+        message: 'Checking for updates…',
+        context: context,
+        icon: Icons.sync,
+        leftBarColor: AppTheme.accent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    rc.refresh().then((changed) async {
+      if (!context.mounted) return;
+      // Prefer surfacing an app update over a generic "up to date" toast.
+      final shownUpdate =
+          await AppUpdateService().showIfNeeded(context);
+      if (!context.mounted || shownUpdate) return;
+      final msg = changed
+          ? 'Updates applied ✓'
+          : 'You are up to date';
+      messenger.showSnackBar(
+        AppTheme.customSnackBar(
+          message: msg,
+          context: context,
+          icon: changed ? Icons.check_circle_outline : Icons.info_outline,
+          leftBarColor: changed ? AppTheme.success : AppTheme.mutedText,
+        ),
+      );
+    }).catchError((_) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        AppTheme.customSnackBar(
+          message: 'Could not reach update server',
+          context: context,
+          icon: Icons.error_outline,
+          leftBarColor: Colors.redAccent,
+        ),
+      );
+    });
   }
 
 }
@@ -777,6 +892,101 @@ class _SettingsTile extends StatelessWidget {
               const Icon(Icons.chevron_right, color: AppTheme.mutedText),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NotificationToggleTile extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String prefKey;
+  final Color iconColor;
+
+  const _NotificationToggleTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.prefKey,
+    this.iconColor = AppTheme.accent,
+  });
+
+  @override
+  State<_NotificationToggleTile> createState() => _NotificationToggleTileState();
+}
+
+class _NotificationToggleTileState extends State<_NotificationToggleTile> {
+  bool _enabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final enabled = await NotificationService().notificationEnabled(widget.prefKey);
+    if (mounted) setState(() => _enabled = enabled);
+  }
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _enabled = value);
+    await NotificationService().setNotificationEnabled(widget.prefKey, enabled: value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: widget.iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(widget.icon, color: widget.iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: _enabled ? Colors.white : AppTheme.mutedText,
+                  ),
+                ),
+                Text(
+                  widget.subtitle,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    color: AppTheme.mutedText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _enabled,
+            onChanged: _toggle,
+            activeTrackColor: AppTheme.accent,
+            activeThumbColor: Colors.white,
+            inactiveTrackColor: AppTheme.background,
+            inactiveThumbColor: AppTheme.mutedText,
+          ),
+        ],
       ),
     );
   }

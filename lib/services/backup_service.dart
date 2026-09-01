@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import '../data/database_helper.dart';
 import '../data/models/task_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/streak_data_store.dart';
 
 class BackupService {
   static final BackupService _instance = BackupService._internal();
@@ -17,13 +18,13 @@ class BackupService {
     final tasks = await db.getAllTasks();
     
     final prefs = await SharedPreferences.getInstance();
-    final streak = prefs.getInt('streak') ?? 0;
-    final bestStreak = prefs.getInt('bestStreak') ?? 0;
-    final lastPerfectDay = prefs.getString('lastPerfectDay');
-    final isStreakFrozen = prefs.getBool('isStreakFrozen') ?? false;
-    final streakFrozenWeek = prefs.getInt('streakFrozenWeek');
-    final earnedMilestones = prefs.getString('earnedMilestones');
-    final streakHistory = prefs.getString('streakHistory');
+    final streak = await StreakDataStore.streak();
+    final bestStreak = await StreakDataStore.bestStreak();
+    final lastPerfectDay = await StreakDataStore.lastPerfectDay();
+    final isStreakFrozen = await StreakDataStore.isFrozen();
+    final streakFrozenWeek = await StreakDataStore.frozenWeek();
+    final earnedMilestones = await StreakDataStore.earnedMilestonesJson();
+    final streakHistory = await StreakDataStore.streakHistoryJson();
     final notificationHour = prefs.getInt('notificationHour') ?? 9;
     final notificationMinute = prefs.getInt('notificationMinute') ?? 0;
 
@@ -36,6 +37,9 @@ class BackupService {
         'date': t.date.toIso8601String(),
         'deadline': t.deadline?.toIso8601String(),
         'isExtended': t.isExtended,
+        'completedAt': t.completedAt?.toIso8601String(),
+        'recurrence': t.recurrence.index,
+        'recurrenceDays': t.recurrenceDays?.join(','),
       }).toList(),
       'stats': {
         'streak': streak,
@@ -109,15 +113,22 @@ class BackupService {
       }
 
       // Import tasks
-      for (final taskData in tasksData) {
+for (final taskData in tasksData) {
         final task = Task(
           title: taskData['title'] as String,
           isCompleted: taskData['isCompleted'] as bool,
           date: DateTime.parse(taskData['date'] as String),
-          deadline: taskData['deadline'] != null 
-              ? DateTime.parse(taskData['deadline'] as String) 
+          deadline: taskData['deadline'] != null
+              ? DateTime.parse(taskData['deadline'] as String)
               : null,
           isExtended: taskData['isExtended'] as bool? ?? false,
+          completedAt: taskData['completedAt'] != null
+              ? DateTime.parse(taskData['completedAt'] as String)
+              : null,
+          recurrence: TaskRecurrence.values[taskData['recurrence'] as int? ?? 0],
+          recurrenceDays: taskData['recurrenceDays'] != null
+              ? (taskData['recurrenceDays'] as String).split(',').map(int.parse).toList()
+              : null,
         );
         await db.createTask(task);
       }

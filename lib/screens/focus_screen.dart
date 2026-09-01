@@ -220,7 +220,6 @@ class _FocusScreenState extends State<FocusScreen> with SingleTickerProviderStat
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     return Consumer<PomodoroProvider>(
       builder: (context, provider, _) {

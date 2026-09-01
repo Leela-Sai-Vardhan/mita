@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
+import '../core/mitzy_assets.dart';
+import 'remote_config_service.dart';
 
 class RatePromptService {
   static const _hasRatedKey = 'rate_has_rated';
@@ -29,6 +31,11 @@ class RatePromptService {
   }
 
   Future<bool> shouldShow() async {
+    // Remote kill-switch: if the config disables the rate prompt, never show it.
+    if (!RemoteConfigService.instance.featureFlag('show_rate_prompt')) {
+      return false;
+    }
+
     final prefs = await SharedPreferences.getInstance();
 
     if (prefs.getBool(_hasRatedKey) ?? false) return false;
@@ -78,7 +85,16 @@ class RatePromptService {
     _showRateDialog(context);
   }
 
-  void _showRateDialog(BuildContext context) {
+  void _showRateDialog(BuildContext context, {String? assetPath}) {
+    final rc = RemoteConfigService.instance;
+    final copy = (
+      title: rc.rateDialogTitle ?? 'Enjoying Mita?',
+      body: rc.rateDialogBody ??
+          "I'm a student developer building this alone. "
+              'A quick rating on the Play Store would mean the world to me — '
+              'it helps me stay motivated and keep improving Mita for you.',
+    );
+
     HapticFeedback.mediumImpact();
 
     showDialog(
@@ -93,25 +109,27 @@ class RatePromptService {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppTheme.accent.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/mitzy_rate.png',
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.cover,
+            ClipOval(
+              child: SizedBox(
+                width: 100,
+                height: 100,
+                child: FutureBuilder<String>(
+                  future: MitzyAssets.resolve(DateTime.now()),
+                  initialData: assetPath ?? MitzyAssets.standard,
+                  builder: (context, snapshot) {
+                    return Image.asset(
+                      snapshot.data ?? MitzyAssets.standard,
+                      width: 100,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    );
+                  },
                 ),
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              'Enjoying Mita?',
+              copy.title,
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -120,9 +138,7 @@ class RatePromptService {
             ),
             const SizedBox(height: 12),
             Text(
-              "I'm a student developer building this alone. "
-              'A quick rating on the Play Store would mean the world to me — '
-              'it helps me stay motivated and keep improving Mita for you.',
+              copy.body,
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(
                 fontSize: 13,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:in_app_update/in_app_update.dart';
 import '../core/theme.dart';
+import '../services/notification_service.dart';
+import '../services/app_update_service.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
 import 'stats_screen.dart';
@@ -28,6 +30,10 @@ class MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    final pendingTab = NotificationService().takePendingTab;
+    if (pendingTab != null && pendingTab >= 0 && pendingTab < _screens.length) {
+      _currentIndex = pendingTab;
+    }
     _checkForUpdate();
   }
 
@@ -51,6 +57,14 @@ class MainNavigationState extends State<MainNavigation> {
     } catch (e) {
       debugPrint('[InAppUpdate] Error checking for update: $e');
     }
+
+    // Remote-config force-update gate (Vercel-driven, independent of Play's
+    // rollout). Runs after the frame so the navigator is mounted before we
+    // show a dialog.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppUpdateService().showIfNeeded(context);
+    });
   }
 
   static GlobalKey<MainNavigationState> get navigatorKey => _key;

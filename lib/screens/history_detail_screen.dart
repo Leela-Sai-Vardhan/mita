@@ -23,6 +23,7 @@ class HistoryDetailScreen extends StatefulWidget {
 }
 
 class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
+  bool _rewardedFlowActive = false;
 
   @override
   Widget build(BuildContext context) {
@@ -482,6 +483,7 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
   }
 
   void _showRewardedAdAndToggle(BuildContext context, TaskProvider provider, Task task) {
+    if (_rewardedFlowActive) return;
     if (!AdService().isRewardedReady) {
       ScaffoldMessenger.of(context).showSnackBar(
         AppTheme.customSnackBar(
@@ -493,6 +495,7 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
       );
       return;
     }
+    _rewardedFlowActive = true;
 
     showDialog(
       context: context,
@@ -512,9 +515,12 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
       ),
     );
 
-    AdService().showRewardedAd(
-      onEarned: (amount) {
-        if (context.mounted) Navigator.pop(context); // Pop loading dialog
+    AdService().showRewardedAd().then((earned) async {
+      if (_rewardedFlowActive && context.mounted) Navigator.pop(context); // Pop loading dialog
+      _rewardedFlowActive = false;
+      if (!context.mounted) return;
+
+      if (earned) {
         provider.toggleTask(task);
         ScaffoldMessenger.of(context).showSnackBar(
           AppTheme.customSnackBar(
@@ -524,19 +530,17 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
             leftBarColor: AppTheme.success,
           ),
         );
-      },
-      onAdFailed: () {
-        if (context.mounted) Navigator.pop(context);
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           AppTheme.customSnackBar(
-            message: 'Ad failed to load. Please try again.',
+            message: 'Ad closed before completing. Task was not changed.',
             context: context,
-            icon: Icons.error_outline,
-            leftBarColor: Colors.redAccent,
+            icon: Icons.info_outline,
+            leftBarColor: Colors.orangeAccent,
           ),
         );
-      },
-    );
+      }
+    });
   }
 }
 

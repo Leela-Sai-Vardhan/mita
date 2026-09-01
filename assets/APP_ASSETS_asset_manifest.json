@@ -1,0 +1,46 @@
+{
+    "project": "Mita App",
+    "version": "1.0.0",
+    "assets": [
+        {
+            "id": "char_mitzy_rate_base",
+            "filename": "mitzy_rate.svg",
+            "path": "characters/mitzy_rate.svg",
+            "type": "vector",
+            "dimensions": "200x200",
+            "background": "transparent_with_tinted_circle",
+            "usage": "Default mascot icon for the Rate Us dialog.",
+            "placement": "Center-aligned above the 'Enjoying Mita?' text."
+        },
+        {
+            "id": "char_mitzy_winter_cozy",
+            "filename": "mitzy_winter_arc_cozy.svg",
+            "path": "characters/mitzy_winter_arc_cozy.svg",
+            "type": "vector",
+            "dimensions": "200x200",
+            "background": "transparent_with_tinted_circle",
+            "usage": "Winter Arc mascot icon (Cozy & Hot Cocoa).",
+            "placement": "Center-aligned in the Rate Us dialog during Winter Arc mode."
+        },
+        {
+            "id": "char_mitzy_winter_frosty",
+            "filename": "mitzy_winter_arc_frosty.svg",
+            "path": "characters/mitzy_winter_arc_frosty.svg",
+            "type": "vector",
+            "dimensions": "200x200",
+            "background": "transparent_with_tinted_circle",
+            "usage": "Winter Arc mascot icon (Focus & Snowflake).",
+            "placement": "Center-aligned in the Rate Us dialog during Winter Arc mode."
+        },
+        {
+            "id": "char_mitzy_winter_scarf",
+            "filename": "mitzy_winter_arc_scarf.svg",
+            "path": "characters/mitzy_winter_arc_scarf.svg",
+            "type": "vector",
+            "dimensions": "200x200",
+            "background": "transparent_with_tinted_circle",
+            "usage": "Winter Arc mascot icon (Locked In & Scarf).",
+            "placement": "Center-aligned in the Rate Us dialog during Winter Arc mode."
+        }
+    ]
+}
