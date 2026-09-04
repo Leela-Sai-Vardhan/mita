@@ -172,6 +172,11 @@ class RemoteConfigService extends ChangeNotifier {
           ? (_section('seasonal')['winter_arc'] as Map<String, dynamic>)
                   ['splash_copy_default'] as String?
           : null;
+  String? get winterArcDailyMessage =>
+      _section('seasonal')['winter_arc'] is Map<String, dynamic>
+          ? (_section('seasonal')['winter_arc'] as Map<String, dynamic>)
+              ['daily_message'] as String?
+          : null;
 
   // Ads.
   String? get rewardedAdUnitId => stringValue('ads', 'rewarded_ad_unit_id');

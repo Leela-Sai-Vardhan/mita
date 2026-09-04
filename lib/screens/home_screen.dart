@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'focus_screen.dart';
 import '../services/rate_prompt_service.dart';
 import '../widgets/upcoming_events_banner.dart';
+import '../widgets/winter_arc_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -110,6 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildTopBar(provider, dateStr, context),
               _buildDayProgressCard(provider),
+              const WinterArcCard(),
               const UpcomingEventsBanner(),
               if (showBanner && wisdomParts != null)
                 WisdomBanner(
