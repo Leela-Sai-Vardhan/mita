@@ -6,13 +6,15 @@ import '../core/mitzy_assets.dart';
 import '../core/winter_arc.dart';
 import '../providers/task_provider.dart';
 import 'mitzy_avatar.dart';
+import 'snowfall_effect.dart';
 
 /// The flagship Winter Arc campaign card for the Home screen.
 ///
 /// Shows only while the arc is in season (remote-kill via
 /// `seasonal.winter_arc.enabled`): day counter, locked-in days, arc
-/// progress, a rotating daily motivation line, and the floating seasonal
-/// Mitzy. Tapping opens a detail sheet with the full arc breakdown.
+/// progress, a rotating daily motivation line, gentle snowfall, and the
+/// floating seasonal Mitzy. Tapping opens a detail sheet with the full
+/// arc breakdown.
 class WinterArcCard extends StatefulWidget {
   const WinterArcCard({super.key});
 
@@ -42,38 +44,52 @@ class _WinterArcCardState extends State<WinterArcCard> {
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
       child: GestureDetector(
         onTap: () => _showArcSheet(context, now, provider),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF16222E).withValues(alpha: 0.85),
-                AppTheme.surface,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: const Color(0xFF80D8FF).withValues(alpha: 0.25),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Stack(
             children: [
-              _buildHeader(now),
-              const SizedBox(height: 10),
-              _buildProgress(now, provider),
-              const SizedBox(height: 10),
-              Text(
-                WinterArc.dailyMessage(now),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: AppTheme.mutedText,
-                  fontStyle: FontStyle.italic,
+              // Card background with frost gradient.
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF16222E).withValues(alpha: 0.9),
+                      AppTheme.surface,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: const Color(0xFF80D8FF).withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(now),
+                    const SizedBox(height: 10),
+                    _buildProgress(now, provider),
+                    const SizedBox(height: 10),
+                    Text(
+                      WinterArc.dailyMessage(now),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        height: 1.45,
+                        color: AppTheme.mutedText,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Gentle snowfall drifting over the card.
+              const Positioned.fill(
+                child: IgnorePointer(
+                  child: SnowfallEffect(),
                 ),
               ),
             ],
@@ -95,6 +111,12 @@ class _WinterArcCardState extends State<WinterArcCard> {
             children: [
               Row(
                 children: [
+                  const Icon(
+                    Icons.ac_unit,
+                    size: 14,
+                    color: Color(0xFF80D8FF),
+                  ),
+                  const SizedBox(width: 4),
                   Text(
                     'WINTER ARC',
                     style: GoogleFonts.spaceGrotesk(
@@ -152,13 +174,24 @@ class _WinterArcCardState extends State<WinterArcCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '$lockedIn days locked in 🔒',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.lock,
+                  size: 14,
+                  color: Color(0xFF80D8FF),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$lockedIn days locked in',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
             Text(
               nextMilestone != null
@@ -261,13 +294,26 @@ class _WinterArcSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Winter Arc ${now.year}-${(now.year + 1) % 100}',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.ac_unit,
+                              size: 18,
+                              color: Color(0xFF80D8FF),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Winter Arc ${now.year}-${(now.year + 1) % 100}',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -299,13 +345,24 @@ class _WinterArcSheet extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    Text(
-                      'Your Winter Arc contract',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.military_tech,
+                          size: 16,
+                          color: Color(0xFF69F0AE),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Your Winter Arc contract',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -325,16 +382,29 @@ class _WinterArcSheet extends StatelessWidget {
               ),
               if (nextMilestone != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  lockedIn == 0
-                      ? 'First locked-in day unlocks the 7-day badge.'
-                      : 'Next badge at $nextMilestone locked-in days — '
-                          '${nextMilestone - lockedIn} to go.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: const Color(0xFF80D8FF),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.emoji_events,
+                      size: 14,
+                      color: Color(0xFFFFD700),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        lockedIn == 0
+                            ? 'First locked-in day unlocks the 7-day badge.'
+                            : 'Next badge at $nextMilestone locked-in days — '
+                                '${nextMilestone - lockedIn} to go.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: const Color(0xFF80D8FF),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -350,7 +420,7 @@ class _WinterArcSheet extends StatelessWidget {
     required int remaining,
     required int currentStreak,
   }) {
-    Widget stat(String label, String value, Color color) {
+    Widget stat(String label, String value, Color color, IconData icon) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -359,6 +429,8 @@ class _WinterArcSheet extends StatelessWidget {
         ),
         child: Column(
           children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 4),
             Text(
               value,
               style: GoogleFonts.spaceGrotesk(
@@ -383,16 +455,29 @@ class _WinterArcSheet extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: stat('Days locked in', '$lockedIn', const Color(0xFF80D8FF)),
+          child: stat(
+            'Days locked in',
+            '$lockedIn',
+            const Color(0xFF80D8FF),
+            Icons.lock,
+          ),
         ),
         const SizedBox(width: 10),
-        Expanded(child: stat('Current streak', '$currentStreak', AppTheme.accent)),
+        Expanded(
+          child: stat(
+            'Current streak',
+            '$currentStreak',
+            AppTheme.accent,
+            Icons.local_fire_department_outlined,
+          ),
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: stat(
             'Arc completion',
             '${((lockedIn / total) * 100).toStringAsFixed(0)}%',
             AppTheme.success,
+            Icons.emoji_events_outlined,
           ),
         ),
       ],
