@@ -50,7 +50,11 @@
               "enum": ["cozy", "frosty", "scarf"]
             },
             "splash_copy": { "type": "string" },
-            "splash_copy_default": { "type": "string" }
+            "splash_copy_default": { "type": "string" },
+            "daily_message": {
+              "type": "string",
+              "description": "Optional override for the Winter Arc card's rotating daily motivation. When absent, the app cycles its built-in phase-based pool."
+            }
           }
         }
       }
@@ -110,7 +114,11 @@
       "properties": {
         "latest_version": { "type": "string" },
         "latest_build": { "type": "integer", "minimum": 0 },
-        "force_update_from_build": { "type": "integer", "minimum": 0 },
+        "force_update_from_build": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Builds below this number are force-updated. 0 disables forcing; only applies when latest_build is actually newer than the installed build."
+        },
         "update_title": { "type": "string" },
         "update_message": { "type": "string" }
       }

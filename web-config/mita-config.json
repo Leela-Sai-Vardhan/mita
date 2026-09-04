@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-09-01T00:00:00Z",
+  "updated_at": "2026-09-04T00:00:00Z",
   "config_url": "https://mita-android.vercel.app/mita-config.json",
 
   "theme": {
@@ -14,7 +14,7 @@
   "seasonal": {
     "winter_arc": {
       "enabled": true,
-      "start_month": 12,
+      "start_month": 9,
       "end_month": 2,
       "mitzy_variant": "cozy",
       "splash_copy": "Meet Mitzy ❄️",
@@ -53,7 +53,7 @@
     {
       "id": "event_winter_arc_2026",
       "title": "Winter Arc begins",
-      "date": "2026-12-01T00:00:00Z",
+      "date": "2026-09-01T00:00:00Z",
       "type": "seasonal",
       "is_campaign": false,
       "message": "Lock in. Winter Arc is here — cozy vibes and deep focus."
@@ -71,7 +71,7 @@
   "app_update": {
     "latest_version": "2.0.0",
     "latest_build": 11,
-    "force_update_from_build": 999999,
+    "force_update_from_build": 0,
     "update_title": "Update available",
     "update_message": "A new version of Mita is available. Update to get the latest features and fixes."
   }

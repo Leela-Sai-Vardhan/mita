@@ -11,11 +11,13 @@ import '../core/mitzy_assets.dart';
 /// statically so the pre-campaign look is unchanged.
 ///
 /// When [assetPath] is null the current seasonal asset is resolved via
-/// [MitzyAssets.resolve].
+/// [MitzyAssets.resolve]. Pass [date] to pin the season (tests/preview);
+/// defaults to now.
 class MitzyAvatar extends StatefulWidget {
   const MitzyAvatar({
     super.key,
     this.assetPath,
+    this.date,
     this.width = 56,
     this.height = 56,
     this.fit = BoxFit.contain,
@@ -25,6 +27,9 @@ class MitzyAvatar extends StatefulWidget {
 
   /// The asset to render; resolved seasonally when null.
   final String? assetPath;
+
+  /// The moment used for seasonal resolution; defaults to now.
+  final DateTime? date;
 
   final double width;
   final double height;
@@ -48,7 +53,7 @@ class _MitzyAvatarState extends State<MitzyAvatar>
   @override
   void initState() {
     super.initState();
-    _floatEnabled = MitzyAssets.isWinterActive(DateTime.now());
+    _floatEnabled = MitzyAssets.isWinterActive(widget.date ?? DateTime.now());
     _floatController = AnimationController(
       vsync: this,
       duration: widget.duration,
@@ -88,7 +93,7 @@ class _MitzyAvatarState extends State<MitzyAvatar>
     final path = widget.assetPath;
     if (path != null) return _buildImage(path);
     return FutureBuilder<String>(
-      future: MitzyAssets.resolve(DateTime.now()),
+      future: MitzyAssets.resolve(widget.date ?? DateTime.now()),
       initialData: MitzyAssets.standard,
       builder: (context, snapshot) =>
           _buildImage(snapshot.data ?? MitzyAssets.standard),

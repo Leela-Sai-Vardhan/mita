@@ -2,10 +2,10 @@
   "package": "Mitzy: Winter Arc Edition",
   "version": "1.0.0",
   "app": "Mita (com.dreamstarx.mita)",
-  "description": "Seasonal cozy variant of the Mitzy mascot shown during the Winter Arc season (Dec 1 - end of February). Delivered by the design team as individual PNG files with transparency, a native 8% mint-tinted circular background, and 2px line-art style, consumed from assets/images/.",
+  "description": "Seasonal cozy variant of the Mitzy mascot shown during the Winter Arc season (September 1 - end of February). Delivered by the design team as individual PNG files with transparency, a native 8% mint-tinted circular background, and 2px line-art style, consumed from assets/images/.",
   "placement": {
     "seasonal_window": {
-      "rule": "Month == 12 OR Month <= 2",
+      "rule": "Month == 9 OR Month <= 2",
       "resolver": "lib/core/mitzy_assets.dart",
       "resolver_class": "MitzyAssets",
       "resolver_methods": {
@@ -132,10 +132,10 @@
     }
   ],
   "notes_for_ai_agent": [
-    "The seasonal resolver (lib/core/mitzy_assets.dart) already swaps to the winter assets during Dec-Feb.",
+    "The seasonal resolver (lib/core/mitzy_assets.dart) already swaps to the winter assets during Sep-Feb.",
     "Delivered PNGs live in assets/images/ (pubspec already bundles that whole folder, so no pubspec change needed).",
     "The assets natively include a subtle 8% mint-tinted circular background - do NOT wrap them in an extra circle/bounding box in the UI.",
     "The design team also produced SVG sources and recommended flutter_svg; if SVG files are added later under assets/images/characters/, update pubspec accordingly.",
-    "Current season test: today is Aug 31 (month 8) - NOT winter arc, so resolve() returns the standard banner. To visually verify winter art, temporarily pass a December date."
+    "Current season test: today is Sep 4 (month 9) - winter arc is active (Sep-Feb window), so resolve() returns the seasonal variant. Use a June date to verify the standard banner."
   ]
 }

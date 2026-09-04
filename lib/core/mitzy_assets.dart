@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/services.dart' show rootBundle;
 import '../services/remote_config_service.dart';
+import 'winter_arc.dart';
 
 /// Resolves which Mitzy asset should be shown based on season and availability.
 ///
 /// The standard Mitzy banner is `assets/images/mitzy_rate.png`. During the
-/// "Winter Arc" season (December 1 through the end of February, configurable
+/// "Winter Arc" season (September 1 through the end of February, configurable
 /// via remote config) the app swaps in a cozy Winter Arc variant provided by
 /// the design team, and falls back to the standard asset when the seasonal
 /// art is missing or the season is off.
@@ -28,21 +29,10 @@ class MitzyAssets {
   /// Ordered keys for the three delivered Winter Arc variants.
   static const List<String> winterVariantKeys = ['cozy', 'frosty', 'scarf'];
 
-  /// Whether [date] falls inside the Winter Arc season (Dec 1 – end of Feb),
-  /// or within the config-supplied window when present.
-  static bool isWinterArcSeason(DateTime date) {
-    final rc = RemoteConfigService.instance;
-    final start = rc.winterStartMonth ?? 12;
-    final end = rc.winterEndMonth ?? 2;
-
-    bool inWindow(int month) {
-      if (start <= end) return month >= start && month <= end;
-      // Wraps across year boundary (e.g. Nov–Feb).
-      return month >= start || month <= end;
-    }
-
-    return inWindow(date.month);
-  }
+  /// Whether [date] falls inside the Winter Arc season (Sep 1 – end of Feb),
+  /// or within the config-supplied window when present. Delegates to the
+  /// [WinterArc] engine so art and campaign stay in sync.
+  static bool isWinterArcSeason(DateTime date) => WinterArc.isArcSeason(date);
 
   /// Whether Winter Arc should be active for [date], honouring the remote
   /// `winter_arc.enabled` flag and the seasonal window AND the asset existing.

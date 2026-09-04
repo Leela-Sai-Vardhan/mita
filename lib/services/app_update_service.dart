@@ -34,9 +34,31 @@ class AppUpdateService {
   }
 
   /// True when this build is below the config's force-update threshold.
-  bool get isForceUpdateRequired {
-    final forceFrom = RemoteConfigService.instance.forceUpdateFromBuild;
-    return forceFrom != null && currentBuild < forceFrom;
+  bool get isForceUpdateRequired => forceUpdateRequired(
+        currentBuild: currentBuild,
+        latestBuild: RemoteConfigService.instance.latestBuild,
+        forceFrom: RemoteConfigService.instance.forceUpdateFromBuild,
+      );
+
+  /// Pure force-update decision so the guard can be unit-tested.
+  ///
+  /// Force applies only when all of:
+  /// - `forceFrom` is a real build number (> 0; 0 disables forcing),
+  /// - a newer build actually exists (`latestBuild > currentBuild`),
+  /// - the installed build is below the threshold.
+  ///
+  /// This keeps a misconfigured sentinel (e.g. 999999) or a stale
+  /// `latest_build` from trapping users in a non-dismissable dialog that
+  /// points at a version that does not exist yet.
+  @visibleForTesting
+  static bool forceUpdateRequired({
+    required int currentBuild,
+    int? latestBuild,
+    int? forceFrom,
+  }) {
+    if (forceFrom == null || forceFrom <= 0) return false;
+    if (latestBuild == null || latestBuild <= currentBuild) return false;
+    return currentBuild < forceFrom;
   }
 
   /// Returns a promise that resolves true once any pending update is shown.

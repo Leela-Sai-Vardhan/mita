@@ -3,6 +3,15 @@ import 'package:mita/core/mitzy_assets.dart';
 
 void main() {
   group('MitzyAssets.isWinterArcSeason', () {
+    test('returns true for September (season start)', () {
+      expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 9, 1)), isTrue);
+    });
+
+    test('returns true for October / November', () {
+      expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 10, 15)), isTrue);
+      expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 11, 30)), isTrue);
+    });
+
     test('returns true for December', () {
       expect(MitzyAssets.isWinterArcSeason(DateTime(2025, 12, 15)), isTrue);
     });
@@ -15,7 +24,7 @@ void main() {
       expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 2, 28)), isTrue);
     });
 
-    test('returns false for March', () {
+    test('returns false for March (season end)', () {
       expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 3, 1)), isFalse);
     });
 
@@ -23,8 +32,8 @@ void main() {
       expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 6, 15)), isFalse);
     });
 
-    test('returns false for November (month before winter)', () {
-      expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 11, 30)), isFalse);
+    test('returns false for August (month before season start)', () {
+      expect(MitzyAssets.isWinterArcSeason(DateTime(2026, 8, 31)), isFalse);
     });
   });
 
