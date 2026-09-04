@@ -5,6 +5,7 @@ import '../core/streak_milestones.dart';
 import '../providers/task_provider.dart';
 import 'streak_calendar.dart';
 import 'milestone_badge.dart';
+import 'streak_flame.dart';
 
 class StreakDashboard extends StatelessWidget {
   final TaskProvider provider;
@@ -166,11 +167,14 @@ class StreakDashboard extends StatelessWidget {
           height: 120,
           child: CustomPaint(
             painter: _ProgressRingPainter(progress: progress, color: color),
-            child: Center(
+              child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 28)),
+                  if (emoji == '🔥')
+                    const StreakFlame(size: 34)
+                  else
+                    Text(emoji, style: const TextStyle(fontSize: 28)),
                   const SizedBox(height: 2),
                   Text(
                     streak.toString(),

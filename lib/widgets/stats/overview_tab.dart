@@ -8,6 +8,7 @@ import '../../providers/stats_provider.dart';
 import '../../screens/history_detail_screen.dart';
 import '../../screens/streak_journey_screen.dart';
 import '../../widgets/streak_ring_painter.dart';
+import '../../widgets/streak_flame.dart';
 import 'stat_card.dart';
 
 class OverviewTab extends StatefulWidget {
@@ -226,7 +227,9 @@ class _OverviewTabState extends State<OverviewTab> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(emoji, style: const TextStyle(fontSize: 12)),
+                      isFrozen
+                          ? Text(emoji, style: const TextStyle(fontSize: 12))
+                          : const StreakFlame(size: 16),
                       Text(
                         streak.toString(),
                         style: GoogleFonts.spaceGrotesk(

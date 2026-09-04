@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/theme.dart';
 import '../core/streak_milestones.dart';
+import 'streak_flame.dart';
 
 class StreakIndicator extends StatelessWidget {
   final int streak;
@@ -18,7 +19,6 @@ class StreakIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isFrozen ? AppTheme.streakFreeze : AppTheme.getStreakColor(streak);
-    final emoji = isFrozen ? '⏳' : '🔥';
     final label = StreakMilestones.getStreakTitle(streak, isFrozen: isFrozen);
 
     return GestureDetector(
@@ -69,7 +69,10 @@ class StreakIndicator extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Text(emoji, style: const TextStyle(fontSize: 17)),
+                        isFrozen
+                            ? const Text('⏳',
+                                style: TextStyle(fontSize: 17))
+                            : const StreakFlame(size: 22),
                       ],
                     ),
                   ),

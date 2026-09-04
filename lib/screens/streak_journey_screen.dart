@@ -9,6 +9,7 @@ import '../widgets/streak_ring_painter.dart';
 import '../widgets/streak_calendar.dart';
 import '../widgets/milestone_badge.dart';
 import '../widgets/dashed_circle_painter.dart';
+import '../widgets/streak_flame.dart';
 
 class StreakJourneyScreen extends StatefulWidget {
   final TaskProvider provider;
@@ -185,10 +186,13 @@ class _StreakJourneyScreenState extends State<StreakJourneyScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            emoji,
-                            style: TextStyle(fontSize: ringSize * 0.28),
-                          ),
+                          if (emoji == '🔥')
+                            StreakFlame(size: ringSize * 0.42)
+                          else
+                            Text(
+                              emoji,
+                              style: TextStyle(fontSize: ringSize * 0.28),
+                            ),
                           Text(
                             streak.toString(),
                             style: GoogleFonts.spaceGrotesk(

@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 
 /// Animated celebration card shown when all tasks are completed.
@@ -28,9 +30,12 @@ class AllDoneAnimation extends StatefulWidget {
 
 class _AllDoneAnimationState extends State<AllDoneAnimation>
     with TickerProviderStateMixin {
+  static const _dismissedKeyPrefix = 'celebration_dismissed_';
+
   late final AnimationController _mainController;
   late final AnimationController _sparkleController;
   late final AnimationController _glowController;
+  bool _dismissed = false;
 
   @override
   void initState() {
@@ -47,6 +52,33 @@ class _AllDoneAnimationState extends State<AllDoneAnimation>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
+    _loadDismissedToday();
+  }
+
+  /// Loads whether the user already dismissed today's celebration, so
+  /// navigating back to Home doesn't re-trigger it. Persisted per-day:
+  /// tomorrow's perfect day gets a fresh celebration.
+  Future<void> _loadDismissedToday() async {
+    final today = DateTime.now();
+    final key =
+        '$_dismissedKeyPrefix${today.year}-${today.month}-${today.day}';
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool(key) ?? false;
+    if (dismissed && mounted) {
+      setState(() => _dismissed = true);
+    }
+  }
+
+  /// Hides the celebration until the next perfect day. Persisted for the
+  /// day so tab switches and app restarts don't re-show it.
+  void _dismiss() {
+    _sparkleController.stop();
+    _glowController.stop();
+    setState(() => _dismissed = true);
+    final today = DateTime.now();
+    final key =
+        '$_dismissedKeyPrefix${today.year}-${today.month}-${today.day}';
+    SharedPreferences.getInstance().then((prefs) => prefs.setBool(key, true));
   }
 
   @override
@@ -59,6 +91,10 @@ class _AllDoneAnimationState extends State<AllDoneAnimation>
 
   @override
   Widget build(BuildContext context) {
+    // Dismissed: render nothing (the whole card goes away) until the next
+    // perfect day re-creates this widget fresh.
+    if (_dismissed) return const SizedBox.shrink();
+
     final color = widget.isMilestone
         ? AppTheme.getStreakColor(widget.streak)
         : AppTheme.success;
@@ -115,61 +151,73 @@ class _AllDoneAnimationState extends State<AllDoneAnimation>
                   ),
                 );
               }),
-              Row(
-                children: [
-                  // Animated checkmark circle
-                  Transform.scale(
-                    scale: Curves.elasticOut.transform(
-                      _mainController.value,
-                    ),
+              // Dismiss button (top-right).
+              Positioned(
+                top: -8,
+                right: -8,
+                child: GestureDetector(
+                  onTap: _dismiss,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
                     child: Container(
-                      width: 60,
-                      height: 60,
+                      width: 26,
+                      height: 26,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: color.withValues(alpha: 0.15),
-                        border: Border.all(color: color.withValues(alpha: 0.4), width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.2 * _mainController.value),
-                            blurRadius: 16,
-                          ),
-                        ],
+                        color: AppTheme.background.withValues(alpha: 0.8),
+                        border: Border.all(
+                          color: AppTheme.mutedText.withValues(alpha: 0.3),
+                        ),
                       ),
-                      child: widget.isMilestone
-                          ? Center(
-                              child: Text(
-                                widget.milestoneEmoji ?? '🎉',
-                                style: const TextStyle(fontSize: 28),
-                              ),
-                            )
-                          : Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Icon(
-                                  Icons.check_rounded,
-                                  size: 30,
-                                  color: color,
-                                ),
-                                // Pulsing ring
-                                Transform.scale(
-                                  scale: 1.0 + _glowController.value * 0.15,
-                                  child: Container(
-                                    width: 60,
-                                    height: 60,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: color.withValues(
-                                          alpha: 0.3 * (1 - _glowController.value),
-                                        ),
-                                        width: 2,
-                                      ),
-                                    ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 16,
+                        color: AppTheme.mutedText,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  // Celebration animation (Lottie: check + confetti, 2x, plays
+                  // once). Rendered in a fixed 60x60 slot via OverflowBox so
+                  // the oversized 144px art bursts out of the card without
+                  // changing the original layout.
+                  SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Transform.scale(
+                      scale: Curves.elasticOut.transform(
+                        _mainController.value,
+                      ),
+                      child: OverflowBox(
+                        maxWidth: 144,
+                        maxHeight: 144,
+                        child: widget.isMilestone
+                            ? Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Lottie.asset(
+                                    'assets/animations/all_done_celebration.lottie',
+                                    width: 144,
+                                    height: 144,
+                                    fit: BoxFit.contain,
                                   ),
-                                ),
-                              ],
-                            ),
+                                  Text(
+                                    widget.milestoneEmoji ?? '🎉',
+                                    style: const TextStyle(fontSize: 40),
+                                  ),
+                                ],
+                              )
+                            : Lottie.asset(
+                                'assets/animations/all_done_celebration.lottie',
+                                width: 144,
+                                height: 144,
+                                fit: BoxFit.contain,
+                              ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
