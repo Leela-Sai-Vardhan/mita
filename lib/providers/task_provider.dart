@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:home_widget/home_widget.dart';
 import 'package:in_app_review/in_app_review.dart';
-import 'package:intl/intl.dart';
 import '../data/database_helper.dart';
 import '../data/models/task_model.dart';
 import '../services/notification_service.dart';
@@ -11,6 +10,7 @@ import '../services/json_storage_service.dart';
 import '../services/rate_prompt_service.dart';
 import '../services/telemetry_service.dart';
 import '../core/streak_milestones.dart';
+import '../core/streak_freeze_rules.dart';
 
 class TaskProvider with ChangeNotifier {
   List<Task> _todayTasks = [];
@@ -199,10 +199,40 @@ class TaskProvider with ChangeNotifier {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
-  int _getIsoWeek(DateTime date) {
-    final dayOfYear = int.parse(DateFormat('D').format(date));
-    final weekOfYear = ((dayOfYear - date.weekday + 10) / 7).floor();
-    return weekOfYear;
+  /// Snapchat-style streak expiry (see [StreakFreezeRules]): a day only
+  /// counts as missed once it has fully ended, and opening the app mid-day
+  /// never consumes the weekly freeze.
+  Future<void> _checkStreakFreeze() async {
+    if (_streak <= 0) return;
+    if (isPerfectDay) return;
+
+    final action = StreakFreezeRules.decide(
+      lastPerfectDay: _lastPerfectDay,
+      now: DateTime.now(),
+      frozenWeek: _streakFrozenWeek,
+    );
+
+    switch (action) {
+      case StreakFreezeAction.none:
+      case StreakFreezeAction.alreadyFrozen:
+        debugPrint('[TaskProvider] Streak check: no change (${action.name})');
+        return;
+      case StreakFreezeAction.freeze:
+        _streakFrozenWeek = StreakFreezeRules.weekIndex(
+            DateTime.now().subtract(const Duration(days: 1)));
+        _isStreakFrozen = true;
+        await _writeStreakState(await SharedPreferences.getInstance());
+        debugPrint('[TaskProvider] Streak frozen: weekly freeze spent (streak preserved)');
+        return;
+      case StreakFreezeAction.reset:
+        _streak = 0;
+        _lastPerfectDay = null;
+        _isStreakFrozen = false;
+        _streakFrozenWeek = null;
+        await _writeStreakState(await SharedPreferences.getInstance());
+        debugPrint('[TaskProvider] Streak reset: freeze already spent');
+        return;
+    }
   }
 
   Future<void> _writeStreakState(SharedPreferences p) async {
@@ -358,41 +388,6 @@ class TaskProvider with ChangeNotifier {
       await JsonStorageService().saveToJson();
     } catch (e) {
       debugPrint('[TaskProvider] ⚠️ JSON backup failed (non-fatal): $e');
-    }
-  }
-
-  Future<void> _checkStreakFreeze() async {
-    if (_streak <= 0) return;
-    if (isPerfectDay) return;
-
-    final String todayStr = _getTodayKey();
-    
-    // Explicit date-change detection: if lastPerfectDay is today, no freeze needed
-    if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) return;
-
-    // Date has changed since last perfect day - check if today qualifies as perfect day
-    // Reload tasks to ensure we have current date's tasks (handles app running overnight)
-    await _loadTasks();
-    
-    // Re-check after reload
-    if (isPerfectDay) return;
-    if (_lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr) return;
-
-    final now = DateTime.now();
-    final currentWeek = _getIsoWeek(now);
-
-    if (_streakFrozenWeek == currentWeek) {
-      _streak = 0;
-      _lastPerfectDay = null;
-      _isStreakFrozen = false;
-      _streakFrozenWeek = null;
-      await _writeStreakState(await SharedPreferences.getInstance());
-      debugPrint('[TaskProvider] 🔴 Streak reset: second freeze this week');
-    } else {
-      _streakFrozenWeek = currentWeek;
-      _isStreakFrozen = true;
-      await _writeStreakState(await SharedPreferences.getInstance());
-      debugPrint('[TaskProvider] ⏳ Streak frozen: first miss this week');
     }
   }
 
@@ -576,12 +571,19 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<void> _incrementStreak() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastPerfectDayStr = prefs.getString('lastPerfectDay');
     final now = DateTime.now();
     final String todayStr = _getTodayKey();
 
-    if (lastPerfectDayStr != todayStr) {
+    // Judge from the authoritative in-memory state (loaded from the atomic
+    // blob), NOT the legacy prefs key — the blob writer never updates the
+    // legacy key, so reading it here allowed stale values to double-count
+    // or skip streak increments after restores.
+    final alreadyCountedToday =
+        _lastPerfectDay != null && _getDateKey(_lastPerfectDay!) == todayStr;
+
+    if (!alreadyCountedToday) {
+      // Snapchat-style continuity: a streak that was preserved by the
+      // weekly freeze keeps counting from where it left off.
       _streak++;
 
       try {
@@ -615,7 +617,7 @@ class TaskProvider with ChangeNotifier {
       }
 
       // Atomic write of all streak state
-      await _writeStreakState(prefs);
+      await _writeStreakState(await SharedPreferences.getInstance());
     }
   }
 
