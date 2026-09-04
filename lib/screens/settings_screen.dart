@@ -677,7 +677,15 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'This app stores your tasks locally on your device. We do not collect or share any personal information.',
+              'This app stores your tasks, streaks, and Winter Arc contract '
+              'locally on your device. We do not collect or share any '
+              'personal information.',
+              style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Rewarded ads are optional and only shown when you choose to '
+              'watch one. They are served by Google AdMob.',
               style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 14),
             ),
             const SizedBox(height: 12),
@@ -749,11 +757,20 @@ class SettingsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              AppTheme.appVersion,
+              'Version ${AppTheme.appVersion.split('+').first} (build ${AppTheme.appVersion.split('+').last})',
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Focus on what matters.\nThree tasks. One day.',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: AppTheme.mutedText,
+                height: 1.4,
               ),
             ),
             const SizedBox(height: 8),

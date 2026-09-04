@@ -910,7 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAddButton(TaskProvider provider, BuildContext context) {
     List<Widget> children = [];
 
-    if (provider.isFullPerfectDay) {
+    if (provider.isPerfectDay) {
       final milestone = StreakMilestones.getMilestoneForDays(provider.streak);
       final isMilestone = provider.streak >= 3 && StreakMilestones.isMilestoneDay(provider.streak);
       children.add(

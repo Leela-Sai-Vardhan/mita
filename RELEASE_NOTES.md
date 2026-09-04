@@ -1,5 +1,33 @@
 # Release Notes
 
+## v2.0.1+12 — Winter Arc: Lock-In Season
+
+### Winter Arc Campaign
+- **Seasonal campaign (Sep 1 – Feb 28)**: Home card tracking "Day X of 181" with phases (Lock In → Deep Winter → Final Stretch), locked-in-day counter, badge ladder (7/21/50/100/150/200), and rotating daily motivation. Collapsed by default; tap the card for the full arc sheet, tap the chevron to expand the contract in place.
+- **Personal contract of 3 non-negotiables** (new `ArcRoutines` engine): pick from the trend's most-cited binary habits (train, 10k steps, read 10 pages, meditate…), goal-tagged and time-bucketed. Completing them counts as locked in; suggestions adapt to the time of day and your goals. Contract resets each September; catalog remotely tunable via config.
+- **Seasonal Mitzy art + animations**: cozy/frosty/scarf variants with the designed 3s breathing float on splash + rate dialog; snowfall layer on the Winter Arc card.
+
+### Streak System (major fix)
+- **Snapchat-style expiry**: a day only counts as missed after it fully ends — opening the app mid-day can never consume the weekly freeze or reset the streak (the old logic reset streaks on app reopens). First missed week spends the freeze and preserves the streak; a later missed week resets.
+- **Animated streak flame** (Lottie) replaces the static 🔥 in the home pill, streak dashboard, journey ring, and stats overview.
+
+### Celebrations
+- **All-done celebration** rebuilt with a confetti Lottie at 2x bursting out of the card; dismissible (X), and dismissal persists per day (no re-trigger on tab switches or restarts).
+- Celebration now fires at a perfect day (3 core tasks) even when extra tasks are still open.
+
+### Monetization (fairer gating)
+- **Rewarded-ad gate on contract/suggestion adds**: tasks beyond the core 3 consume an extension slot and require a watched ad — same rule everywhere (extra-task button, Winter Arc chips, arc sheet suggestions). Ads remotely disabled → free.
+- **History unlock** now requires a rewarded ad ("Watch ad to unlock 7 more days").
+
+### Fixes
+- Force-update trap eliminated: the 999999 sentinel in remote config trapped every build in a non-dismissable dialog; force-update now requires a genuinely newer build (guard + 7 regression tests).
+- Winter Arc season fixed Dec 1 → Sep 1 across app defaults, remote config, and the live site.
+
+### Infrastructure
+- Remote config pipeline: repo source of truth (`web-config/`) + JSON Schema + GitHub Actions validation + auto-deploy to the app-config site; `daily_message` and `routines` overrides documented.
+- Privacy policy updated (local-only storage, Winter Arc data, optional rewarded ads, anonymous config download) — effective Sep 4, 2026.
+- Tests: 19 → 84.
+
 ## v2.0.0+11 — Mita 2.0: Premium Redesign, Pomodoro & Reliability Audit
 
 ### UX & Flow Redesign

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/remote_config_service.dart';
 
 class AppTheme {
-  static const String appVersion = '2.0.0+11';
+  static const String appVersion = '2.0.1+12';
   static const Color background = Color(0xFF0D0D0D);
   static const Color surface = Color(0xFF1A1A1A);
   static const Color accent = Color(0xFFE94560);

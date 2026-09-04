@@ -88,8 +88,8 @@ void main() {
 
   group('AppUpdateService.currentBuild', () {
     test('parses the build from AppTheme.appVersion', () {
-      // AppTheme.appVersion is '2.0.0+11'.
-      expect(AppUpdateService().currentBuild, 11);
+      // AppTheme.appVersion is '2.0.1+12'.
+      expect(AppUpdateService().currentBuild, 12);
     });
   });
 }

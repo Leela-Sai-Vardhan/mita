@@ -9,6 +9,7 @@ import '../core/quick_picks.dart';
 import '../providers/task_provider.dart';
 import 'arc_contract_sheet.dart';
 import 'mitzy_avatar.dart';
+import 'rewarded_add_flow.dart';
 import 'snowfall_effect.dart';
 
 /// The flagship Winter Arc campaign card for the Home screen.
@@ -27,6 +28,7 @@ class WinterArcCard extends StatefulWidget {
 
 class _WinterArcCardState extends State<WinterArcCard> {
   bool _isWinter = false;
+  bool _expanded = false;
   List<ArcRoutine>? _contract;
 
   @override
@@ -45,9 +47,9 @@ class _WinterArcCardState extends State<WinterArcCard> {
 
   Future<void> _addRoutineToToday(String title) async {
     final provider = context.read<TaskProvider>();
-    if (!provider.canAddTask) return;
-    await provider.addTask(title);
-    await _loadContract();
+    // Same gate as the Home screen: tasks 4-5 require the rewarded ad.
+    final added = await addTaskWithRewardedGate(context, provider, title);
+    if (added) await _loadContract();
   }
 
   @override
@@ -70,13 +72,16 @@ class _WinterArcCardState extends State<WinterArcCard> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
       child: GestureDetector(
+        // Tap opens the arc detail sheet; the chevron expands the card.
         onTap: () => _showArcSheet(context, now, provider),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: Stack(
             children: [
               // Card background with frost gradient.
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -95,25 +100,27 @@ class _WinterArcCardState extends State<WinterArcCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(now),
+                    _buildHeader(now, provider),
                     const SizedBox(height: 10),
                     _buildProgress(now, provider),
-                    if (_contract != null && _contract!.isNotEmpty) ...[
+                    if (_expanded) ...[
+                      if (_contract != null && _contract!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _buildContractRow(provider, contractToday),
+                      ],
                       const SizedBox(height: 10),
-                      _buildContractRow(provider, contractToday),
-                    ],
-                    const SizedBox(height: 10),
-                    Text(
-                      WinterArc.dailyMessage(now),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        height: 1.45,
-                        color: AppTheme.mutedText,
-                        fontStyle: FontStyle.italic,
+                      Text(
+                        WinterArc.dailyMessage(now),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          height: 1.45,
+                          color: AppTheme.mutedText,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -233,7 +240,7 @@ class _WinterArcCardState extends State<WinterArcCard> {
     if (result != null) await _loadContract();
   }
 
-  Widget _buildHeader(DateTime now) {
+  Widget _buildHeader(DateTime now, TaskProvider provider) {
     final phase = WinterArc.phase(now);
     return Row(
       children: [
@@ -289,6 +296,23 @@ class _WinterArcCardState extends State<WinterArcCard> {
                 ),
               ),
             ],
+          ),
+        ),
+        // Chevron: expands the compact card in place (rotates when open).
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: AnimatedRotation(
+              turns: _expanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 250),
+              child: const Icon(
+                Icons.expand_more,
+                size: 22,
+                color: Color(0xFF80D8FF),
+              ),
+            ),
           ),
         ),
       ],
@@ -699,7 +723,11 @@ class _WinterArcSheetState extends State<_WinterArcSheet> {
                         GestureDetector(
                           onTap: () {
                             if (widget.provider.canAddTask) {
-                              widget.provider.addTask(r.title);
+                              addTaskWithRewardedGate(
+                                context,
+                                widget.provider,
+                                r.title,
+                              );
                             }
                           },
                           child: Container(

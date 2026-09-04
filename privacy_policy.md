@@ -1,6 +1,6 @@
 # Mita Privacy Policy
 
-**Effective Date:** April 22, 2026
+**Effective Date:** September 4, 2026
 
 ---
 
@@ -25,6 +25,7 @@ We **do not** collect any personally identifiable information (PII) such as:
 We collect only non-personal data necessary for app functionality:
 - **Task Data:** Task titles and completion status (stored locally on your device)
 - **Usage Data:** Simple completion analytics stored locally
+- **Winter Arc Data:** Your seasonal contract non-negotiables and streak history (stored locally on your device)
 - **Device Information:** Basic device type for ad optimization (handled by third parties, see Section 5)
 
 ---
@@ -44,6 +45,8 @@ All task data and streak information is stored **only** on your device using:
 - SharedPreferences (simple key-value storage)
 
 We do not sync, transmit, or store your data on any external servers.
+
+The App periodically downloads a small, anonymous configuration file (colors, seasonal campaign settings, feature flags) from our website to keep the app up to date without requiring a store update. This request contains no personal data — it is a plain file download, like opening a webpage.
 
 ---
 
@@ -140,13 +143,11 @@ We will respond to your inquiry within 30 days.
 ## 11. Ad-Related Information
 
 ### 11.1 Ad Categories
-We display the following ad types through AdMob:
-- Interstitial ads (shown when navigating to Stats or History)
-- Rewarded ads (optional, for unlocking features)
+We display the following ad type through AdMob:
+- Rewarded ads (optional, user-initiated, for unlocking optional features)
 
 ### 11.2 Ad Frequency
-- Interstitial ads: Maximum 3 per session
-- Rewarded ads: Always user-initiated (optional to watch)
+- Rewarded ads: Always user-initiated (optional to watch). No ads play automatically.
 
 ---
 
@@ -184,4 +185,4 @@ Although we do not collect personal data, we support GDPR principles:
 
 **Mita** — Focus on what matters • Three tasks. One day.
 
-*Last Updated: April 22, 2026*
+*Last Updated: September 4, 2026*

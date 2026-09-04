@@ -92,8 +92,18 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('WINTER ARC'));
+    // The card body opens the arc sheet; the chevron expands the card.
+    // Verify both interactions.
+    await tester.tap(find.byIcon(Icons.expand_more));
     // Fixed pumps (not pumpAndSettle): the card runs infinite animations.
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Card expanded: the daily motivation line is now visible.
+    expect(find.byType(WinterArcCard), findsOneWidget);
+
+    // Open the arc detail sheet by tapping the card body.
+    await tester.tap(find.text('WINTER ARC'));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 

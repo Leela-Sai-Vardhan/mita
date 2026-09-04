@@ -69,8 +69,8 @@
   ],
 
   "app_update": {
-    "latest_version": "2.0.0",
-    "latest_build": 11,
+    "latest_version": "2.0.1",
+    "latest_build": 12,
     "force_update_from_build": 0,
     "update_title": "Update available",
     "update_message": "A new version of Mita is available. Update to get the latest features and fixes."

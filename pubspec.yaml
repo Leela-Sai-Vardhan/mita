@@ -1,7 +1,7 @@
 name: mita
 description: "Mita — Focus on what matters. Three tasks, one day."
 publish_to: 'none'
-version: 2.0.0+11
+version: 2.0.1+12
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
