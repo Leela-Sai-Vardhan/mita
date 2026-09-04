@@ -372,19 +372,45 @@ class _WinterArcCardState extends State<WinterArcCard> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _WinterArcSheet(now: now, provider: provider),
-    );
+    ).then((_) {
+      // The contract may have been created/edited inside the sheet —
+      // reload it so the card's contract row reflects it immediately.
+      if (mounted) _loadContract();
+    });
   }
 }
 
 /// Full-arc breakdown bottom sheet.
-class _WinterArcSheet extends StatelessWidget {
+class _WinterArcSheet extends StatefulWidget {
   const _WinterArcSheet({required this.now, required this.provider});
 
   final DateTime now;
   final TaskProvider provider;
 
   @override
+  State<_WinterArcSheet> createState() => _WinterArcSheetState();
+}
+
+class _WinterArcSheetState extends State<_WinterArcSheet> {
+  Future<List<ArcRoutine>?>? _contractFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _contractFuture = ArcRoutines.loadContract(widget.now);
+  }
+
+  /// Reloads the contract after it changes (picker closed with a save).
+  void _refreshContract() {
+    setState(() {
+      _contractFuture = ArcRoutines.loadContract(widget.now);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final now = widget.now;
+    final provider = widget.provider;
     final lockedIn = WinterArc.lockedInDays(provider.streakHistory, now);
     final total = WinterArc.totalDays(now);
     final remaining = WinterArc.daysRemaining(now);
@@ -553,14 +579,14 @@ class _WinterArcSheet extends StatelessWidget {
   /// Contract + suggestions block for the arc sheet. The contract loads
   /// async (SharedPreferences), suggestions depend on the user's goals.
   Widget _buildContractSection(BuildContext context) {
-    final now = this.now;
+    final now = widget.now;
     return FutureBuilder<List<ArcRoutine>?>(
-      future: ArcRoutines.loadContract(now),
+      future: _contractFuture,
       builder: (context, contractSnap) {
         final contract = contractSnap.data;
         final today = ArcRoutines.contractToday(
           contract,
-          provider.todayTasks
+          widget.provider.todayTasks
               .where((t) => t.isCompleted)
               .map((t) => t.title)
               .toList(),
@@ -571,7 +597,7 @@ class _WinterArcSheet extends StatelessWidget {
             final suggestions = ArcRoutines.suggestions(
               contract: contract,
               todayTitles:
-                  provider.todayTasks.map((t) => t.title).toList(),
+                  widget.provider.todayTasks.map((t) => t.title).toList(),
               goalKeys: goalsSnap.data ?? const [],
               now: now,
             );
@@ -603,9 +629,10 @@ class _WinterArcSheet extends StatelessWidget {
                         context,
                         initialSelection:
                             contract?.map((r) => r.title).toList(),
-                      ).then((_) {
-                        // Refresh the parent sheet by popping and reopening
-                        // is heavy; the contract reloads on next open.
+                      ).then((saved) {
+                        // Saved (non-null): reload so this section and the
+                        // Home card behind both reflect the new contract.
+                        if (saved != null) _refreshContract();
                       }),
                       child: Text(
                         contract == null || contract.isEmpty
@@ -671,8 +698,8 @@ class _WinterArcSheet extends StatelessWidget {
                       for (final r in suggestions)
                         GestureDetector(
                           onTap: () {
-                            if (provider.canAddTask) {
-                              provider.addTask(r.title);
+                            if (widget.provider.canAddTask) {
+                              widget.provider.addTask(r.title);
                             }
                           },
                           child: Container(
