@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../core/theme.dart';
 import '../providers/task_provider.dart';
 import '../data/models/task_model.dart';
+import '../services/ad_service.dart';
 import 'history_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   Map<DateTime, List<Task>> _groupedTasks = {};
   bool _isLoading = true;
+  bool _rewardedFlowActive = false;
 
   @override
   void initState() {
@@ -36,20 +38,83 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
-  void _unlockMoreHistory() async {
+  /// Unlocks 7 more days of history after watching a rewarded ad.
+  /// Mirrors the extra-task flow on the Home screen: the unlock is only
+  /// granted when the reward is actually earned.
+  Future<void> _unlockMoreHistory() async {
+    if (_rewardedFlowActive) return;
     final provider = Provider.of<TaskProvider>(context, listen: false);
-    await provider.unlockMoreHistory(7);
-    await _loadHistory();
-    if (mounted) {
+
+    if (AdService.disabled) {
+      // Ads remotely off: unlock for free so the feature never dead-ends.
+      await provider.unlockMoreHistory(7);
+      await _loadHistory();
+      return;
+    }
+
+    if (!AdService().isRewardedReady) {
       ScaffoldMessenger.of(context).showSnackBar(
         AppTheme.customSnackBar(
-          message: 'Unlocked 7 more days of history!',
+          message: 'Ad not ready yet, try again in a moment',
           context: context,
-          icon: Icons.check_circle_outline,
-          leftBarColor: AppTheme.success,
+          icon: Icons.info_outline,
+          leftBarColor: Colors.orangeAccent,
         ),
       );
+      return;
     }
+
+    _rewardedFlowActive = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.accent,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text('Loading ad...',
+                style: GoogleFonts.dmSans(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    // Build the result snackbars up front (customSnackBar is pure) so no
+    // BuildContext is touched after the async ad gap.
+    final successBar = AppTheme.customSnackBar(
+      message: 'Unlocked 7 more days of history!',
+      context: context,
+      icon: Icons.check_circle_outline,
+      leftBarColor: AppTheme.success,
+    );
+    final failureBar = AppTheme.customSnackBar(
+      message: 'Ad closed before completing. History not unlocked.',
+      context: context,
+      icon: Icons.info_outline,
+      leftBarColor: Colors.orangeAccent,
+    );
+
+    final earned = await AdService().showRewardedAd();
+    navigator.pop();
+    _rewardedFlowActive = false;
+
+    if (earned) {
+      await provider.unlockMoreHistory(7);
+      await _loadHistory();
+    }
+    if (mounted) messenger.showSnackBar(earned ? successBar : failureBar);
   }
 
   @override
@@ -218,25 +283,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildLockCard() {
+    final adReady = !AdService.disabled && AdService().isRewardedReady;
     return GestureDetector(
       onTap: _unlockMoreHistory,
       child: Container(
+        margin: const EdgeInsets.only(top: 4),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: adReady ? Colors.orange : AppTheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.borderEmpty, style: BorderStyle.solid),
+          border: Border.all(
+            color: adReady
+                ? Colors.orange.withValues(alpha: 0.4)
+                : AppTheme.borderEmpty,
+            style: BorderStyle.solid,
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.lock_open, color: AppTheme.accent, size: 20),
+            Icon(
+              adReady ? Icons.play_circle_outline : Icons.lock_open,
+              color: adReady ? Colors.white : AppTheme.accent,
+              size: 20,
+            ),
             const SizedBox(width: 8),
-            Text(
-              'Tap to unlock older history',
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: AppTheme.mutedText,
+            Flexible(
+              child: Text(
+                AdService.disabled
+                    ? 'Tap to unlock 7 more days'
+                    : adReady
+                        ? 'Watch ad to unlock 7 more days'
+                        : 'Preparing ad...',
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: adReady ? Colors.white : AppTheme.mutedText,
+                ),
               ),
             ),
           ],
