@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../core/arc_routines.dart';
 import '../core/theme.dart';
 import '../core/mitzy_assets.dart';
 import '../core/winter_arc.dart';
+import '../core/quick_picks.dart';
 import '../providers/task_provider.dart';
+import 'arc_contract_sheet.dart';
 import 'mitzy_avatar.dart';
 import 'snowfall_effect.dart';
 
@@ -24,11 +27,27 @@ class WinterArcCard extends StatefulWidget {
 
 class _WinterArcCardState extends State<WinterArcCard> {
   bool _isWinter = false;
+  List<ArcRoutine>? _contract;
 
   @override
   void initState() {
     super.initState();
     _isWinter = MitzyAssets.isWinterActive(DateTime.now());
+    _loadContract();
+  }
+
+  Future<void> _loadContract() async {
+    final now = DateTime.now();
+    final contract = await ArcRoutines.loadContract(now);
+    if (!mounted) return;
+    setState(() => _contract = contract);
+  }
+
+  Future<void> _addRoutineToToday(String title) async {
+    final provider = context.read<TaskProvider>();
+    if (!provider.canAddTask) return;
+    await provider.addTask(title);
+    await _loadContract();
   }
 
   @override
@@ -39,6 +58,14 @@ class _WinterArcCardState extends State<WinterArcCard> {
 
     final now = DateTime.now();
     final provider = context.watch<TaskProvider>();
+    // Pure recompute on every provider change so today's adherence is live.
+    final contractToday = ArcRoutines.contractToday(
+      _contract,
+      provider.todayTasks
+          .where((t) => t.isCompleted)
+          .map((t) => t.title)
+          .toList(),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -71,6 +98,10 @@ class _WinterArcCardState extends State<WinterArcCard> {
                     _buildHeader(now),
                     const SizedBox(height: 10),
                     _buildProgress(now, provider),
+                    if (_contract != null && _contract!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _buildContractRow(provider, contractToday),
+                    ],
                     const SizedBox(height: 10),
                     Text(
                       WinterArc.dailyMessage(now),
@@ -97,6 +128,109 @@ class _WinterArcCardState extends State<WinterArcCard> {
         ),
       ),
     );
+  }
+
+  /// The contract row: each non-negotiable with its today-state. Tapping a
+  /// pending one adds it as today's task (within the 5/day budget);
+  /// tapping the header opens the contract picker.
+  Widget _buildContractRow(TaskProvider provider, ArcContractToday today) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              today.allDone ? Icons.task_alt : Icons.lock_outline,
+              size: 14,
+              color: today.allDone
+                  ? AppTheme.success
+                  : const Color(0xFF80D8FF),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                today.allDone
+                    ? 'Contract locked in today ✓'
+                    : 'Contract ${today.doneCount}/${today.totalCount} today',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: today.allDone ? AppTheme.success : Colors.white,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _editContract(),
+              child: Text(
+                'Edit',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF80D8FF),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final routine in today.routines)
+              GestureDetector(
+                onTap: today.isDone(routine)
+                    ? null
+                    : () => _addRoutineToToday(routine.title),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: today.isDone(routine)
+                        ? AppTheme.success.withValues(alpha: 0.12)
+                        : AppTheme.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: today.isDone(routine)
+                          ? AppTheme.success.withValues(alpha: 0.4)
+                          : const Color(0xFF80D8FF).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        today.isDone(routine)
+                            ? Icons.check
+                            : Icons.add,
+                        size: 12,
+                        color: today.isDone(routine)
+                            ? AppTheme.success
+                            : const Color(0xFF80D8FF),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        routine.title,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color:
+                              today.isDone(routine) ? Colors.white : AppTheme.mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _editContract() async {
+    final initial = _contract?.map((r) => r.title).toList();
+    final result = await ArcContractSheet.show(context, initialSelection: initial);
+    if (result != null) await _loadContract();
   }
 
   Widget _buildHeader(DateTime now) {
@@ -380,6 +514,8 @@ class _WinterArcSheet extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              _buildContractSection(context),
               if (nextMilestone != null) ...[
                 const SizedBox(height: 12),
                 Row(
@@ -411,6 +547,173 @@ class _WinterArcSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// Contract + suggestions block for the arc sheet. The contract loads
+  /// async (SharedPreferences), suggestions depend on the user's goals.
+  Widget _buildContractSection(BuildContext context) {
+    final now = this.now;
+    return FutureBuilder<List<ArcRoutine>?>(
+      future: ArcRoutines.loadContract(now),
+      builder: (context, contractSnap) {
+        final contract = contractSnap.data;
+        final today = ArcRoutines.contractToday(
+          contract,
+          provider.todayTasks
+              .where((t) => t.isCompleted)
+              .map((t) => t.title)
+              .toList(),
+        );
+        return FutureBuilder<List<String>>(
+          future: QuickPicks.getGoalKeys(),
+          builder: (context, goalsSnap) {
+            final suggestions = ArcRoutines.suggestions(
+              contract: contract,
+              todayTitles:
+                  provider.todayTasks.map((t) => t.title).toList(),
+              goalKeys: goalsSnap.data ?? const [],
+              now: now,
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.lock,
+                      size: 16,
+                      color: Color(0xFF80D8FF),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        contract == null || contract.isEmpty
+                            ? 'Pick your non-negotiables'
+                            : 'Your non-negotiables · ${today.doneCount}/${today.totalCount} today',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => ArcContractSheet.show(
+                        context,
+                        initialSelection:
+                            contract?.map((r) => r.title).toList(),
+                      ).then((_) {
+                        // Refresh the parent sheet by popping and reopening
+                        // is heavy; the contract reloads on next open.
+                      }),
+                      child: Text(
+                        contract == null || contract.isEmpty
+                            ? 'Choose'
+                            : 'Edit',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF80D8FF),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (contract != null && contract.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final r in contract)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: today.isDone(r)
+                                ? AppTheme.success.withValues(alpha: 0.12)
+                                : AppTheme.background,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: today.isDone(r)
+                                  ? AppTheme.success.withValues(alpha: 0.4)
+                                  : AppTheme.borderEmpty,
+                            ),
+                          ),
+                          child: Text(
+                            '${today.isDone(r) ? '✓ ' : ''}${r.title}',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              color: today.isDone(r)
+                                  ? Colors.white
+                                  : AppTheme.mutedText,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (suggestions.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Suggested for ${ArcRoutines.currentBucket(now)}',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: AppTheme.mutedText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final r in suggestions)
+                        GestureDetector(
+                          onTap: () {
+                            if (provider.canAddTask) {
+                              provider.addTask(r.title);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.background,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF80D8FF)
+                                    .withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.add,
+                                  size: 12,
+                                  color: Color(0xFF80D8FF),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  r.title,
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    color: AppTheme.mutedText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

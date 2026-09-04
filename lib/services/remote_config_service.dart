@@ -178,6 +178,21 @@ class RemoteConfigService extends ChangeNotifier {
               ['daily_message'] as String?
           : null;
 
+  /// Remote override for the Winter Arc routine catalog
+  /// (`seasonal.winter_arc.routines`: [{title, goal, bucket}]).
+  /// Raw maps; ArcRoutines converts them so core stays the single
+  /// source of the routine type.
+  List<Map<String, dynamic>> get arcRoutines {
+    final v = _section('seasonal')['winter_arc'];
+    if (v is Map<String, dynamic>) {
+      final raw = v['routines'];
+      if (raw is List) {
+        return raw.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+    return const [];
+  }
+
   // Ads.
   String? get rewardedAdUnitId => stringValue('ads', 'rewarded_ad_unit_id');
   String? get bannerAdUnitId => stringValue('ads', 'banner_ad_unit_id');

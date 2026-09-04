@@ -54,6 +54,25 @@
             "daily_message": {
               "type": "string",
               "description": "Optional override for the Winter Arc card's rotating daily motivation. When absent, the app cycles its built-in phase-based pool."
+            },
+            "routines": {
+              "type": "array",
+              "description": "Optional override for the Winter Arc routine catalog (the binary non-negotiables users pick their contract from). When absent, the app uses its built-in curated list.",
+              "items": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "goal": {
+                    "type": "string",
+                    "enum": ["health", "fitness", "mindfulness", "learning", "career", "creativity", "relationships"]
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "enum": ["morning", "midday", "evening", "any"]
+                  }
+                }
+              }
             }
           }
         }
