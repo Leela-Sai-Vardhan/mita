@@ -1,0 +1,37 @@
+# Validates web-config/mita-config.json against web-config/mita-config.schema.json
+# on every push/PR that touches the config. This is the guardrail before the file
+# is deployed to the app config site (https://mita-android.vercel.app/mita-config.json).
+#
+# Deploy flow (manual, needs the Vercel project + CLI):
+#   1. Edit web-config/mita-config.json on this repo (schema is enforced here).
+#   2. Pull to the machine that owns the Vercel project, or use `vercel link`.
+#   3. `npx vercel deploy --prod` from the folder the project is linked to.
+# The app picks the change up on its next startup refresh ("Check for updates"
+# in Settings also re-fetches while running).
+name: Validate remote config
+
+on:
+  push:
+    paths:
+      - 'web-config/**'
+  pull_request:
+    paths:
+      - 'web-config/**'
+
+jobs:
+  validate:
+    name: Validate mita-config.json against schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate schema
+        run: |
+          pip install --quiet jsonschema
+          python -m jsonschema \
+            -i web-config/mita-config.json \
+            web-config/mita-config.schema.json

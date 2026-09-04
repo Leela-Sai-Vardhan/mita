@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-09-01T00:00:00Z",
+  "config_url": "https://mita-android.vercel.app/mita-config.json",
+
+  "theme": {
+    "background": "#0D0D0D",
+    "surface": "#1A1A1A",
+    "accent": "#E94560",
+    "success": "#4CAF50",
+    "muted_text": "#888888"
+  },
+
+  "seasonal": {
+    "winter_arc": {
+      "enabled": true,
+      "start_month": 12,
+      "end_month": 2,
+      "mitzy_variant": "cozy",
+      "splash_copy": "Meet Mitzy ❄️",
+      "splash_copy_default": "Meet Mitzy ✨"
+    }
+  },
+
+  "feature_flags": {
+    "ads_enabled": true,
+    "focus_ambient_sound": true,
+    "show_rate_prompt": true,
+    "home_widget": true,
+    "telemetry": true
+  },
+
+  "ads": {
+    "rewarded_ad_unit_id": "ca-app-pub-1658916437389658/2675524551",
+    "banner_ad_unit_id": ""
+  },
+
+  "copy": {
+    "tagline": "Focus on what matters",
+    "sub_tagline": "Three tasks. One day.",
+    "rate_dialog_title": "Enjoying Mita?",
+    "rate_dialog_body": "I'm a student developer building this alone. A quick rating on the Play Store would mean the world to me — it helps me stay motivated and keep improving Mita for you."
+  },
+
+  "reminders": {
+    "daily": true,
+    "end_of_day": true,
+    "weekly": true,
+    "focus": true
+  },
+
+  "upcoming_events": [
+    {
+      "id": "event_winter_arc_2026",
+      "title": "Winter Arc begins",
+      "date": "2026-12-01T00:00:00Z",
+      "type": "seasonal",
+      "is_campaign": false,
+      "message": "Lock in. Winter Arc is here — cozy vibes and deep focus."
+    },
+    {
+      "id": "event_version_2_1",
+      "title": "Mita 2.1 update",
+      "date": "2026-09-15T00:00:00Z",
+      "type": "announcement",
+      "is_campaign": false,
+      "message": "New features are on the way. Stay tuned."
+    }
+  ],
+
+  "app_update": {
+    "latest_version": "2.0.0",
+    "latest_build": 11,
+    "force_update_from_build": 999999,
+    "update_title": "Update available",
+    "update_message": "A new version of Mita is available. Update to get the latest features and fixes."
+  }
+}

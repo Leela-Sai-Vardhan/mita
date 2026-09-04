@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/constants/storage_keys.dart';
 import '../core/mitzy_assets.dart';
+import '../widgets/mitzy_avatar.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'navigation_shell.dart';
 
@@ -139,8 +140,8 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset(
-                      _mitzyAsset,
+                    MitzyAvatar(
+                      assetPath: _mitzyAsset,
                       width: 56,
                       height: 56,
                     ),

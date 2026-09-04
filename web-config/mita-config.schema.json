@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Mita Remote Config",
+  "description": "Schema for the Vercel-hosted Mita app config. Kept here so edits to web-config/mita-config.json are validated automatically in CI before the file is deployed to https://mita-android.vercel.app/mita-config.json.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "updated_at",
+    "config_url",
+    "theme",
+    "seasonal",
+    "feature_flags",
+    "ads",
+    "copy",
+    "reminders",
+    "upcoming_events",
+    "app_update"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "config_url": { "type": "string" },
+    "theme": {
+      "type": "object",
+      "required": ["background", "surface", "accent", "success", "muted_text"],
+      "additionalProperties": false,
+      "properties": {
+        "background": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "surface": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "accent": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "success": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "muted_text": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+      }
+    },
+    "seasonal": {
+      "type": "object",
+      "required": ["winter_arc"],
+      "additionalProperties": false,
+      "properties": {
+        "winter_arc": {
+          "type": "object",
+          "required": ["enabled", "start_month", "end_month", "mitzy_variant"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "start_month": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "end_month": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "mitzy_variant": {
+              "type": "string",
+              "enum": ["cozy", "frosty", "scarf"]
+            },
+            "splash_copy": { "type": "string" },
+            "splash_copy_default": { "type": "string" }
+          }
+        }
+      }
+    },
+    "feature_flags": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "ads": {
+      "type": "object",
+      "required": ["rewarded_ad_unit_id"],
+      "properties": {
+        "rewarded_ad_unit_id": {
+          "type": "string",
+          "pattern": "^$|^ca-app-pub-[0-9]{10,20}/[0-9]+$"
+        },
+        "banner_ad_unit_id": {
+          "type": "string",
+          "pattern": "^$|^ca-app-pub-[0-9]{10,20}/[0-9]+$",
+          "description": "Reserved. The app currently shows no banners; leave empty."
+        }
+      }
+    },
+    "copy": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "reminders": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "upcoming_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "date"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "date": { "type": "string", "format": "date-time" },
+          "type": { "type": "string" },
+          "is_campaign": { "type": "boolean" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "app_update": {
+      "type": "object",
+      "required": [
+        "latest_version",
+        "latest_build",
+        "force_update_from_build",
+        "update_title",
+        "update_message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "latest_version": { "type": "string" },
+        "latest_build": { "type": "integer", "minimum": 0 },
+        "force_update_from_build": { "type": "integer", "minimum": 0 },
+        "update_title": { "type": "string" },
+        "update_message": { "type": "string" }
+      }
+    }
+  }
+}

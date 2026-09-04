@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
-import '../core/mitzy_assets.dart';
+import '../widgets/mitzy_avatar.dart';
 import 'remote_config_service.dart';
 
 class RatePromptService {
@@ -113,17 +113,11 @@ class RatePromptService {
               child: SizedBox(
                 width: 100,
                 height: 100,
-                child: FutureBuilder<String>(
-                  future: MitzyAssets.resolve(DateTime.now()),
-                  initialData: assetPath ?? MitzyAssets.standard,
-                  builder: (context, snapshot) {
-                    return Image.asset(
-                      snapshot.data ?? MitzyAssets.standard,
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    );
-                  },
+                child: MitzyAvatar(
+                  assetPath: assetPath,
+                  width: 100,
+                  height: 100,
+                  fit: BoxFit.cover,
                 ),
               ),
             ),
